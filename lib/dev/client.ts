@@ -323,6 +323,23 @@ export function createDevClient() {
           error: null,
         }
       },
+      async getSession() {
+        return {
+          data: {
+            session: {
+              access_token: "dev",
+              refresh_token: "",
+              user: {
+                id: DEV_USER_ID,
+                email: DEV_USER_EMAIL,
+                user_metadata: { full_name: "Développement local" },
+                app_metadata: { provider: "dev" },
+              },
+            },
+          },
+          error: null,
+        }
+      },
       async signOut() {
         return { error: null }
       },
@@ -336,6 +353,21 @@ export function createDevClient() {
     from(table: TableName) {
       return new Query(table)
     },
+    rpc(fn: string) {
+      if (fn === "effective_owner_id") return Promise.resolve(ok(DEV_USER_ID))
+      if (fn === "get_my_family") return Promise.resolve(ok(null))
+      if (
+        fn === "create_family" ||
+        fn === "join_family" ||
+        fn === "leave_family" ||
+        fn === "delete_family"
+      ) {
+        return Promise.resolve(
+          fail("Les groupes familiaux nécessitent un compte Google")
+        )
+      }
+      return Promise.resolve(ok(null))
+    },
   } as unknown as SupabaseClient<Database>
 }
 
@@ -344,6 +376,9 @@ export function createUnauthenticatedClient() {
     auth: {
       async getClaims() {
         return { data: { claims: null }, error: null }
+      },
+      async getSession() {
+        return { data: { session: null }, error: null }
       },
       async signOut() {
         return { error: null }
@@ -357,6 +392,9 @@ export function createUnauthenticatedClient() {
     },
     from() {
       throw new Error("Supabase n’est pas configuré")
+    },
+    rpc() {
+      return Promise.resolve({ data: null, error: { message: "Supabase non configuré" } })
     },
   } as unknown as SupabaseClient<Database>
 }

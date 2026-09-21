@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server"
+import { upsertSavedAccount } from "@/lib/accounts/vault"
+import { DEV_ACCOUNT } from "@/lib/accounts/identity"
 import {
   DEV_COOKIE,
   DEV_USER_ID,
@@ -18,5 +20,6 @@ export async function GET(request: Request) {
     path: "/",
     secure: false,
   })
+  await upsertSavedAccount(DEV_ACCOUNT)
   return response
 }

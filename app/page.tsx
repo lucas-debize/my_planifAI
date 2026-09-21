@@ -1,12 +1,11 @@
 import { redirect } from "next/navigation"
 import { AuthScreen } from "@/components/auth-screen"
+import { listSavedAccounts } from "@/lib/accounts/vault"
 import { createClient } from "@/lib/supabase/server"
 import { isDevBypassAllowed } from "@/lib/dev/config"
+import { isSupabaseConfigured } from "@/lib/supabase/env"
 
 export default async function HomePage() {
-  if (isDevBypassAllowed()) {
-    redirect("/auth/dev")
-  }
   try {
     const supabase = await createClient()
     const { data } = await supabase.auth.getClaims()
@@ -14,5 +13,11 @@ export default async function HomePage() {
   } catch {
     // Missing env or expired session: show the auth screen.
   }
-  return <AuthScreen />
+  return (
+    <AuthScreen
+      supabaseReady={isSupabaseConfigured()}
+      devBypass={isDevBypassAllowed()}
+      savedAccounts={await listSavedAccounts()}
+    />
+  )
 }

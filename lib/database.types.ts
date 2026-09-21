@@ -151,6 +151,62 @@ export type Database = {
           },
         ]
       }
+      families: {
+        Row: {
+          id: string
+          name: string
+          invite_code: string
+          owner_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          invite_code?: string
+          owner_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          invite_code?: string
+          owner_id?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      family_members: {
+        Row: {
+          family_id: string
+          user_id: string
+          role: "admin" | "member"
+          display_name: string
+          joined_at: string
+        }
+        Insert: {
+          family_id: string
+          user_id: string
+          role?: "admin" | "member"
+          display_name?: string
+          joined_at?: string
+        }
+        Update: {
+          family_id?: string
+          user_id?: string
+          role?: "admin" | "member"
+          display_name?: string
+          joined_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "family_members_family_id_fkey"
+            columns: ["family_id"]
+            isOneToOne: false
+            referencedRelation: "families"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -159,6 +215,50 @@ export type Database = {
       normalize_ingredient_name: {
         Args: { name: string }
         Returns: string
+      }
+      effective_owner_id: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
+      my_family_id: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
+      is_family_owner: {
+        Args: { fid: string }
+        Returns: boolean
+      }
+      create_family: {
+        Args: { family_name: string; member_name?: string }
+        Returns: {
+          id: string
+          name: string
+          invite_code: string
+          owner_id: string
+          created_at: string
+        }
+      }
+      join_family: {
+        Args: { invite: string; member_name?: string }
+        Returns: {
+          id: string
+          name: string
+          invite_code: string
+          owner_id: string
+          created_at: string
+        }
+      }
+      get_my_family: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      leave_family: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
+      delete_family: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
       }
     }
     Enums: {
@@ -171,3 +271,8 @@ export type Database = {
 }
 
 export type PublicTables = Database["public"]["Tables"]
+
+/* ---------- families ---------- */
+
+export type FamilyRow = PublicTables["families"]["Row"]
+export type FamilyMemberRow = PublicTables["family_members"]["Row"]

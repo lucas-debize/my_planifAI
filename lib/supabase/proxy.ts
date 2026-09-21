@@ -1,6 +1,10 @@
 import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 import { DEV_COOKIE, isDevSessionValue } from "@/lib/dev/config"
+import {
+  AUTH_COOKIE_OPTIONS,
+  getSupabasePublicConfig,
+} from "@/lib/supabase/env"
 
 const PUBLIC_PATHS = new Set(["/", "/connexion"])
 
@@ -9,6 +13,7 @@ function isPublicPath(pathname: string) {
   if (pathname.startsWith("/auth/callback")) return true
   if (pathname.startsWith("/auth/confirm")) return true
   if (pathname.startsWith("/auth/dev")) return true
+  if (pathname.startsWith("/auth/google")) return true
   return false
 }
 
@@ -48,9 +53,8 @@ export async function updateSession(request: NextRequest) {
     return supabaseResponse
   }
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-  if (!url || !key) {
+  const config = getSupabasePublicConfig()
+  if (!config) {
     if (!isPublicPath(pathname)) {
       const redirectUrl = request.nextUrl.clone()
       redirectUrl.pathname = "/connexion"
@@ -60,7 +64,8 @@ export async function updateSession(request: NextRequest) {
     return supabaseResponse
   }
 
-  const supabase = createServerClient(url, key, {
+  const supabase = createServerClient(config.url, config.key, {
+    cookieOptions: AUTH_COOKIE_OPTIONS,
     cookies: {
       getAll() {
         return request.cookies.getAll()
@@ -73,7 +78,10 @@ export async function updateSession(request: NextRequest) {
           request,
         })
         cookiesToSet.forEach(({ name, value, options }) =>
-          supabaseResponse.cookies.set(name, value, options)
+          supabaseResponse.cookies.set(name, value, {
+            ...AUTH_COOKIE_OPTIONS,
+            ...options,
+          })
         )
         Object.entries(headers).forEach(([headerKey, value]) =>
           supabaseResponse.headers.set(headerKey, value)
@@ -92,7 +100,7 @@ export async function updateSession(request: NextRequest) {
     return copySession(supabaseResponse, NextResponse.redirect(redirectUrl))
   }
 
-  if (user && pathname === "/connexion") {
+  if (user && (pathname === "/connexion" || pathname === "/")) {
     const redirectUrl = request.nextUrl.clone()
     redirectUrl.pathname = "/semaine"
     redirectUrl.search = ""
