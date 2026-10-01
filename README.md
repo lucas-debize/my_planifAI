@@ -1,4 +1,4 @@
-# PlanifIA
+# PlanifAI
 
 PWA de planning repas : déjeuner et dîner, semaine après semaine.
 
@@ -59,7 +59,7 @@ L'application tourne gratuitement 24h/24 sans mise en veille :
 3. Dans la section **Environment Variables**, ajoute :
    - `NEXT_PUBLIC_SUPABASE_URL` = `https://<id-projet>.supabase.co`
    - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` = `<clé-anon-supabase>`
-   - `NEXT_PUBLIC_APP_URL` = `https://<nom-de-ton-projet>.vercel.app`
+   - `NEXT_PUBLIC_APP_URL` = `https://planifai-app.vercel.app`
 4. Clique sur **Deploy**.
 5. Une fois le déploiement terminé, finalise les URLs de redirection :
    - Dans **Supabase → Authentication → URL Configuration** :
@@ -85,7 +85,7 @@ Supabase Free met automatiquement en veille les projets inactifs après 7 jours 
 ### Étape 5 : Route de diagnostic et Monitoring (`/api/health`)
 
 L'application expose un endpoint public de santé :
-- URL : `https://<nom-de-ton-projet>.vercel.app/api/health`
+- URL : `https://planifai-app.vercel.app/api/health`
 - Réponse JSON :
   ```json
   {
