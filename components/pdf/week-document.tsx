@@ -117,7 +117,7 @@ export function WeekDocument({
   return (
     <Document>
       <Page size="A4" orientation="landscape" style={styles.page}>
-        <Text style={styles.title}>PlanifIA</Text>
+        <Text style={styles.title}>PlanifAI</Text>
         <Text style={styles.week}>{weekLabel}</Text>
         <View style={styles.table}>
           <View style={styles.headerRow}>

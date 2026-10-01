@@ -30,7 +30,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <aside className="hidden md:flex md:w-60 md:shrink-0 md:flex-col md:border-r md:border-line md:bg-surface">
         <div className="px-5 py-6">
           <Link href="/semaine" className="font-fraunces text-2xl text-ink">
-            PlanifIA
+            PlanifAI
           </Link>
         </div>
         <nav className="flex flex-1 flex-col gap-1 px-3" aria-label="Principal">

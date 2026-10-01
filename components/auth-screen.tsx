@@ -62,7 +62,7 @@ export function AuthScreen({
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center bg-bg px-6 py-12">
       <div className="w-full max-w-sm">
-        <h1 className="font-fraunces text-4xl text-ink">PlanifIA</h1>
+        <h1 className="font-fraunces text-4xl text-ink">PlanifAI</h1>
         <p className="mt-2 text-base text-muted-foreground">
           Déjeuner et dîner, semaine après semaine.
         </p>
