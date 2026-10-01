@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next"
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "PlanifAI",
-    short_name: "PlanifAI",
+    name: "MyPlanifAI",
+    short_name: "MyPlanifAI",
     start_url: "/semaine",
     display: "standalone",
     lang: "fr",
