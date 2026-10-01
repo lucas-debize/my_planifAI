@@ -9,6 +9,7 @@ export async function GET() {
 
   if (config) {
     try {
+      const baseUrl = config.url.replace(/\/+$/, "")
       const res = await fetch(`${baseUrl}/rest/v1/meals?select=count`, {
         headers: {
           apikey: config.key,
