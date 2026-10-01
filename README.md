@@ -2,62 +2,120 @@
 
 PWA de planning repas : déjeuner et dîner, semaine après semaine.
 
-Chaque compte Google a son propre espace. Les repas, courses et semaines restent isolés par `auth.uid()` (RLS).
+Chaque compte Google a son propre espace. Les repas, courses et semaines restent isolés par `auth.uid()` (RLS Supabase).
 
-## Connexion Google (gratuit)
+---
 
-Tout le flux tient dans l’offre gratuite : **Google Cloud** (OAuth) + **Supabase Free**.
+## Déploiement en production 24/24 (Gratuit - 0,00 €)
 
-Pas de mot de passe stocké, pas de secret Google dans l’app. Seule la **clé publique** Supabase est dans Next.js. Le *client secret* Google reste dans le tableau de bord Supabase.
+L'application tourne gratuitement 24h/24 sans mise en veille :
+- **Hébergement Frontend / SSR / PDF** : Vercel Hobby (0 €)
+- **Base de données & Authentification** : Supabase Free Tier (0 €)
+- **Authentification** : Google Cloud OAuth (0 €)
+- **Maintien actif 24/24 (Anti-pause Supabase)** : GitHub Actions Cron (0 €)
 
-### 1. Projet Supabase
+---
 
-1. Crée un projet Free (région `eu-west-1` ou `eu-central-1`).
-2. Exécute dans l’éditeur SQL, dans l’ordre : `001_init.sql`, `002_families.sql`, puis `003_fix_family_rls.sql` (si `002` a déjà été appliqué avant le correctif RLS).
-3. **Authentication → URL Configuration**
-   - Site URL : `http://localhost:3000` (puis ton domaine en prod)
-   - Redirect URLs : `http://localhost:3000/auth/callback` et `https://ton-domaine/auth/callback`
-4. Copie **Project URL** et **Publishable/anon key** (jamais la `service_role`).
+### Étape 1 : Base de données Supabase (5 min)
 
-### 2. Client OAuth Google
+1. Crée un projet gratuit sur [supabase.com](https://supabase.com) (choisis `eu-central-1` Francfort ou `eu-west-1` Londres).
+2. Ouvre le **SQL Editor** dans le tableau de bord Supabase et exécute séquentiellement les scripts du dossier `supabase/migrations/` :
+   - `001_init.sql` (tables repas, créneaux, courses, profils, RLS)
+   - `002_families.sql` (gestion des familles et partages)
+   - `003_fix_family_rls.sql` (politiques RLS affinées)
+3. Va dans **Project Settings → API** et note :
+   - **Project URL** (`https://<id-projet>.supabase.co`)
+   - **anon public key** (`sb_publishable_...` ou clé `anon`)
+   *(Ne partage jamais la clé `service_role`)*.
 
-1. [Google Cloud Console](https://console.cloud.google.com/) → nouveau projet.
-2. **APIs & Services → OAuth consent screen** (Google Auth Platform)
-   - User type : **External**
-   - App name : PlanifIA
-   - Scopes : `openid`, `.../auth/userinfo.email`, `.../auth/userinfo.profile` uniquement
-   - En **Testing**, ajoute ton Gmail dans *Test users* (100 utilisateurs, gratuit). Publier l’app est gratuit pour ces scopes.
-3. **Clients → Create credentials → OAuth client ID → Web application**
-   - Authorized JavaScript origins : `http://localhost:3000` (et `https://ton-domaine`)
-   - Authorized redirect URIs : `https://<ref-projet>.supabase.co/auth/v1/callback`
-     (copie l’URL exacte depuis **Supabase → Authentication → Providers → Google**)
-4. Enregistre le **Client ID** et le **Client secret**.
+---
 
-### 3. Brancher Google dans Supabase
+### Étape 2 : Google Cloud OAuth (5 min)
 
-1. **Authentication → Providers → Google** : Enabled
-2. Colle Client ID et Client secret
-3. Laisse le *Skip nonce check* **désactivé**
+1. Rends-toi sur la [Google Cloud Console](https://console.cloud.google.com/) et crée un nouveau projet (ex: *PlanifIA*).
+2. Va dans **APIs & Services → OAuth consent screen** :
+   - User Type : **External**
+   - Nom de l'application : `PlanifIA`
+   - Scopes demandés : `openid`, `.../auth/userinfo.email`, `.../auth/userinfo.profile`
+   - En phase de test, ajoute tes adresses Gmail dans **Test users** (ou publie l'écran, gratuit pour ces 3 scopes standards).
+3. Va dans **APIs & Services → Credentials → Create Credentials → OAuth client ID** :
+   - Application type : **Web application**
+   - Nom : `PlanifIA Web`
+   - **Authorized redirect URIs** :
+     `https://<id-projet>.supabase.co/auth/v1/callback`
+     *(trouvable aussi dans Supabase → Authentication → Providers → Google)*
+4. Copie le **Client ID** et le **Client secret**.
+5. Dans **Supabase → Authentication → Providers → Google** :
+   - Active Google (**Enable**)
+   - Colle le **Client ID** et le **Client secret**
+   - Laisse *Skip nonce check* désactivé et enregistre.
 
-### 4. Variables d’environnement
+---
 
-Copie `.env.example` vers `.env.local` :
+### Étape 3 : Déploiement sur Vercel (3 min)
 
-```bash
-NEXT_PUBLIC_SUPABASE_URL=https://xxxx.supabase.co
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
-NEXT_PUBLIC_APP_URL=http://localhost:3000
-DEV_AUTH_BYPASS=
-```
+1. Connecte-toi sur [vercel.com](https://vercel.com) avec ton compte GitHub.
+2. Clique sur **Add New Project** et sélectionne le dépôt `PlanifIA`.
+3. Dans la section **Environment Variables**, ajoute :
+   - `NEXT_PUBLIC_SUPABASE_URL` = `https://<id-projet>.supabase.co`
+   - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` = `<clé-anon-supabase>`
+   - `NEXT_PUBLIC_APP_URL` = `https://<nom-de-ton-projet>.vercel.app`
+4. Clique sur **Deploy**.
+5. Une fois le déploiement terminé, finalise les URLs de redirection :
+   - Dans **Supabase → Authentication → URL Configuration** :
+     - **Site URL** : `https://<nom-de-ton-projet>.vercel.app`
+     - **Redirect URLs** : `https://<nom-de-ton-projet>.vercel.app/auth/callback`
+   - Dans **Google Cloud Console → Credentials → ton client OAuth** :
+     - **Authorized JavaScript origins** : ajoute `https://<nom-de-ton-projet>.vercel.app`
 
-En production, `NEXT_PUBLIC_APP_URL` doit être l’origine HTTPS publique (`https://ton-domaine`). Laisse `DEV_AUTH_BYPASS` vide : le compte local n’existe pas en prod.
+---
 
-```bash
-pnpm install
-pnpm dev
-```
+### Étape 4 : Activer le Keepalive 24/24 (Anti-veille Supabase)
 
-Ouvre http://localhost:3000 → **Continuer avec Google**.
+Supabase Free met automatiquement en veille les projets inactifs après 7 jours sans requête. Le dépôt inclut un workflow GitHub Actions (`.github/workflows/supabase-keepalive.yml`) qui envoie une requête authentifiée tous les 3 jours :
+
+1. Sur ton dépôt GitHub, va dans **Settings → Secrets and variables → Actions**.
+2. Clique sur **New repository secret** et ajoute :
+   - `SUPABASE_URL` : l'URL de ton projet Supabase (`https://<id-projet>.supabase.co`)
+   - `SUPABASE_ANON_KEY` : la clé publique anon de ton projet Supabase
+3. Dans l'onglet **Actions** de GitHub, vérifie que le workflow *Supabase Keepalive* est activé. Tu peux déclencher un run de test manuel avec le bouton **Run workflow**.
+
+---
+
+### Étape 5 : Route de diagnostic et Monitoring (`/api/health`)
+
+L'application expose un endpoint public de santé :
+- URL : `https://<nom-de-ton-projet>.vercel.app/api/health`
+- Réponse JSON :
+  ```json
+  {
+    "status": "ok",
+    "timestamp": "2025-05-10T12:00:00.000Z",
+    "database": "connected"
+  }
+  ```
+Cet endpoint peut aussi être interrogé par un service gratuit tiers (ex: [cron-job.org](https://cron-job.org) ou [UptimeRobot](https://uptimerobot.com)) pour une double garantie de disponibilité.
+
+---
+
+## Développement local
+
+1. Copie `.env.example` vers `.env.local` :
+   ```bash
+   cp .env.example .env.local
+   ```
+2. Remplis les variables Supabase ou utilise le mode hors-ligne :
+   ```bash
+   DEV_AUTH_BYPASS=1
+   ```
+3. Installe les dépendances et démarre le serveur de développement :
+   ```bash
+   pnpm install
+   pnpm dev
+   ```
+4. Ouvre [http://localhost:3000](http://localhost:3000).
+
+---
 
 ## Sécurité du flux
 
@@ -68,9 +126,7 @@ Ouvre http://localhost:3000 → **Continuer avec Google**.
 - Déconnexion : `signOut({ scope: "global" })` révoque les refresh tokens.
 - En-têtes : `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`.
 
-## Mode développement (sans Google)
-
-`DEV_AUTH_BYPASS=1` dans `.env.local` affiche **Continuer en mode développement**. Compte `dev@planifia.local`, données dans `.data/dev-store.json`. Ignoré dès que `NODE_ENV=production`.
+---
 
 ## Plusieurs comptes
 
@@ -81,4 +137,3 @@ La page **Compte** affiche l’e-mail réel du compte connecté (Google, lien ma
 La liste locale (e-mail, nom, photo) est un cookie HttpOnly. Le jeton de session de chaque compte est stocké à part, aussi en HttpOnly, pour basculer sans retaper Google. S’il est expiré, PlanifIA relance Google avec `login_hint`.
 
 **Déconnexion** quitte seulement le compte actuel et passe au suivant s’il y en a un. **Tout déconnecter** vide la liste de l’appareil.
-

@@ -6,10 +6,15 @@ import {
   getSupabasePublicConfig,
 } from "@/lib/supabase/env"
 
-const PUBLIC_PATHS = new Set(["/", "/connexion"])
+const PUBLIC_PATHS: Record<string, true> = {
+  "/": true,
+  "/connexion": true,
+  "/api/health": true,
+}
 
 function isPublicPath(pathname: string) {
-  if (PUBLIC_PATHS.has(pathname)) return true
+  if (PUBLIC_PATHS[pathname]) return true
+  if (pathname.startsWith("/api/health")) return true
   if (pathname.startsWith("/auth/callback")) return true
   if (pathname.startsWith("/auth/confirm")) return true
   if (pathname.startsWith("/auth/dev")) return true

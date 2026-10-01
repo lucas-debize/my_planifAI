@@ -1,0 +1,32 @@
+import { NextResponse } from "next/server"
+import { getSupabasePublicConfig } from "@/lib/supabase/env"
+
+export const dynamic = "force-dynamic"
+
+export async function GET() {
+  const config = getSupabasePublicConfig()
+  let database = "not_configured"
+
+  if (config) {
+    try {
+      const baseUrl = config.url.replace(/\/+$/, "")
+      const res = await fetch(`${baseUrl}/rest/v1/`, {
+        headers: {
+          apikey: config.key,
+          Authorization: `Bearer ${config.key}`,
+        },
+        cache: "no-store",
+        signal: AbortSignal.timeout(4000),
+      })
+      database = res.ok ? "connected" : `error_${res.status}`
+    } catch {
+      database = "unreachable"
+    }
+  }
+
+  return NextResponse.json({
+    status: "ok",
+    timestamp: new Date().toISOString(),
+    database,
+  })
+}

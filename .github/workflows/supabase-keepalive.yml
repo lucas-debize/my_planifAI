@@ -1,0 +1,34 @@
+name: Supabase Keepalive
+
+on:
+  schedule:
+    # Exécution tous les 3 jours à 04:00 UTC pour empêcher la mise en veille Supabase Free (seuil: 7 jours)
+    - cron: '0 4 */3 * *'
+  workflow_dispatch:
+
+jobs:
+  keepalive:
+    name: Ping Supabase REST API
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase
+        run: |
+          if [ -z "${{ secrets.SUPABASE_URL }}" ] || [ -z "${{ secrets.SUPABASE_ANON_KEY }}" ]; then
+            echo "::error::Les secrets SUPABASE_URL ou SUPABASE_ANON_KEY ne sont pas configurés dans GitHub Secrets."
+            exit 1
+          fi
+
+          BASE_URL=$(echo "${{ secrets.SUPABASE_URL }}" | sed 's:/*$::')
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            "$BASE_URL/rest/v1/")
+
+          echo "Supabase HTTP status: $HTTP_STATUS"
+
+          if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 400 ]; then
+            echo "Ping Supabase réussi, l'instance reste active 24/24."
+          else
+            echo "::error::Code HTTP inattendu reçu de Supabase: $HTTP_STATUS"
+            exit 1
+          fi
