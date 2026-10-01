@@ -1,7 +1,8 @@
 "use client"
 
 import { useMemo, useRef, useState } from "react"
-import { Check } from "lucide-react"
+import Link from "next/link"
+import { ArrowLeft, Check } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -49,8 +50,10 @@ export function MealPicker({
   const [pickingId, setPickingId] = useState<string | null>(null)
   const closeTimer = useRef<number | null>(null)
   const parsed = parseISODate(date)
-  const title = `${SLOT_LABEL[kind]} · ${parsed ? slotTitleDate(parsed) : date}`
-
+  const dateLabel = parsed ? slotTitleDate(parsed) : date
+  const title = creating
+    ? `Nouvelle idée · ${SLOT_LABEL[kind]}`
+    : `${SLOT_LABEL[kind]} · ${dateLabel}`
   const knownIngredients = useMemo(() => {
     const map = new Map<string, { id: string; name: string }>()
     for (const meal of meals) {
@@ -96,6 +99,7 @@ export function MealPicker({
 
   const body = creating ? (
     <MealForm
+      initialName={query.trim() || undefined}
       knownIngredients={knownIngredients}
       submitLabel="Ajouter au créneau"
       onCancel={() => setCreating(false)}
@@ -108,12 +112,33 @@ export function MealPicker({
         onChange={(event) => setQuery(event.target.value)}
         placeholder="Rechercher un plat"
         aria-label="Rechercher un plat"
+        data-vaul-no-drag
       />
-      <ScrollArea className="h-64">
+      <ScrollArea className="h-64" data-vaul-no-drag>
         {filtered.length === 0 ? (
-          <p className="px-1 py-4 text-sm text-muted-foreground">
-            Aucun plat dans le carnet.
-          </p>
+          query.trim() ? (
+            <div className="flex flex-col items-center justify-center gap-3 px-2 py-8 text-center">
+              <p className="text-sm text-muted-foreground">
+                Aucun plat ne correspond à «&nbsp;{query.trim()}&nbsp;»
+              </p>
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+              >
+                <Link
+                  href={`/idees/nouvelle?nom=${encodeURIComponent(query.trim())}&date=${date}&kind=${kind}`}
+                  onClick={() => onOpenChange(false)}
+                >
+                  Créer le plat «&nbsp;{query.trim()}&nbsp;»
+                </Link>
+              </Button>
+            </div>
+          ) : (
+            <p className="px-1 py-4 text-sm text-muted-foreground">
+              Aucun plat dans le carnet.
+            </p>
+          )
         ) : (
           <ul className="flex flex-col gap-1">
             {filtered.map((meal) => {
@@ -152,12 +177,16 @@ export function MealPicker({
   const footer = creating ? null : (
     <div className="flex flex-col gap-2">
       <Button
-        type="button"
+        asChild
         variant="outline"
         className="min-h-12"
-        onClick={() => setCreating(true)}
       >
-        Nouvelle idée
+        <Link
+          href={`/idees/nouvelle?date=${date}&kind=${kind}${query.trim() ? `&nom=${encodeURIComponent(query.trim())}` : ""}`}
+          onClick={() => onOpenChange(false)}
+        >
+          Nouvelle idée
+        </Link>
       </Button>
       {currentMeal ? (
         <Button
@@ -181,8 +210,18 @@ export function MealPicker({
           onOpenChange(next)
         }}
       >
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
           <DialogHeader>
+            {creating ? (
+              <button
+                type="button"
+                onClick={() => setCreating(false)}
+                className="tap-press inline-flex w-fit items-center gap-1.5 text-xs text-muted-foreground hover:text-ink"
+              >
+                <ArrowLeft className="size-3.5" />
+                <span>Choisir un plat existant</span>
+              </button>
+            ) : null}
             <DialogTitle className="font-fraunces">{title}</DialogTitle>
           </DialogHeader>
           {body}
@@ -202,9 +241,24 @@ export function MealPicker({
     >
       <DrawerContent>
         <DrawerHeader>
+          {creating ? (
+            <button
+              type="button"
+              onClick={() => setCreating(false)}
+              className="tap-press inline-flex w-fit items-center gap-1.5 text-xs text-muted-foreground hover:text-ink"
+            >
+              <ArrowLeft className="size-3.5" />
+              <span>Choisir un plat existant</span>
+            </button>
+          ) : null}
           <DrawerTitle className="font-fraunces">{title}</DrawerTitle>
         </DrawerHeader>
-        <div className="px-4 pb-4">{body}</div>
+        <div
+          className="max-h-[calc(85dvh-8rem)] overflow-y-auto px-4 pb-4 overscroll-contain"
+          data-vaul-no-drag
+        >
+          {body}
+        </div>
         {footer ? <DrawerFooter>{footer}</DrawerFooter> : null}
       </DrawerContent>
     </Drawer>

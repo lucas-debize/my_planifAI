@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { FileDown, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { getWeekSlots } from "@/lib/actions/slots"
 import { parseISODate, weekLabel } from "@/lib/dates"
@@ -56,9 +57,21 @@ export function DownloadPdfButton({ weekStart }: { weekStart: string }) {
       download={filename}
       onClick={onClick}
       aria-busy={busy}
-      className="inline-flex min-h-12 items-center justify-center rounded-[0.75rem] border border-border bg-background px-4 text-sm font-medium hover:bg-muted"
+      className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-[0.75rem] border border-border bg-background px-2.5 text-xs font-medium hover:bg-muted sm:min-h-12 sm:gap-2 sm:px-4 sm:text-sm"
     >
-      {busy ? "Préparation du PDF…" : "Télécharger le PDF"}
+      {busy ? (
+        <>
+          <Loader2 className="size-4 shrink-0 animate-spin" />
+          <span className="hidden sm:inline">Préparation…</span>
+          <span className="sm:hidden">…</span>
+        </>
+      ) : (
+        <>
+          <FileDown className="size-4 shrink-0" />
+          <span className="hidden sm:inline">Télécharger le PDF</span>
+          <span className="sm:hidden">PDF</span>
+        </>
+      )}
     </a>
   )
 }

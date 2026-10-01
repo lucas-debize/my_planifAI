@@ -300,7 +300,11 @@ export function AccountPanel({
 
   return (
     <>
-      <PageHeader title="Compte" />
+      <PageHeader
+        title="Compte"
+        backHref="/semaine"
+        backLabel="Retour au planning"
+      />
       <div className="flex flex-col gap-6 px-4 pb-8 md:max-w-lg md:px-8">
         {current ? (
           <section className="flex flex-col gap-2">

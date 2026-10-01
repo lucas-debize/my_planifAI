@@ -2,34 +2,31 @@
 
 import { useMemo, useState } from "react"
 import { toast } from "sonner"
-import { X } from "lucide-react"
+import { Loader2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Popover,
-  PopoverAnchor,
-  PopoverContent,
-} from "@/components/ui/popover"
 import { upsertMeal } from "@/lib/actions/meals"
 import { actionErrorMessage } from "@/lib/errors"
-import { normalizeName } from "@/lib/ingredients"
+import { displayName, normalizeName } from "@/lib/ingredients"
 import type { MealWithIngredients } from "@/lib/domain/meals"
 
 export function MealForm({
   meal,
+  initialName,
   knownIngredients,
   submitLabel = "Enregistrer",
   onSaved,
   onCancel,
 }: {
   meal?: MealWithIngredients
+  initialName?: string
   knownIngredients: { id: string; name: string }[]
   submitLabel?: string
   onSaved: (saved: MealWithIngredients) => void
   onCancel?: () => void
 }) {
-  const [name, setName] = useState(meal?.name ?? "")
+  const [name, setName] = useState(meal?.name ?? initialName ?? "")
   const [ingredients, setIngredients] = useState(
     meal?.ingredients.map((item) => item.name) ?? []
   )
@@ -75,9 +72,8 @@ export function MealForm({
   }
 
   function saveChip(original: string) {
-    const next = editValue.trim().replace(/\s+/g, " ")
+    const next = displayName(editValue)
     if (!next) {
-      setIngredients((current) => current.filter((value) => value !== original))
       setEditing(null)
       return
     }
@@ -105,12 +101,31 @@ export function MealForm({
       toast.error("Donne un nom au plat.")
       return
     }
+
+    let submitIngredients = [...ingredients]
+    if (draft.trim()) {
+      const parts = draft
+        .split(",")
+        .map((part) => displayName(part))
+        .filter(Boolean)
+      const seen = new Set(submitIngredients.map(normalizeName))
+      for (const part of parts) {
+        const norm = normalizeName(part)
+        if (!norm || seen.has(norm)) continue
+        seen.add(norm)
+        submitIngredients.push(part)
+      }
+      setIngredients(submitIngredients)
+      setDraft("")
+      setOpen(false)
+    }
+
     setPending(true)
     try {
       const saved = await upsertMeal({
         id: meal?.id,
-        name,
-        ingredientNames: ingredients,
+        name: name.trim(),
+        ingredientNames: submitIngredients,
       })
       toast.success("Plat enregistré")
       onSaved(saved)
@@ -145,7 +160,7 @@ export function MealForm({
                 autoFocus
                 maxLength={80}
                 aria-label={`Modifier ${item}`}
-                className="h-12 min-h-12 w-40"
+                className="h-12 min-h-12 w-full max-w-[14rem]"
                 onChange={(event) => setEditValue(event.target.value)}
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
@@ -187,43 +202,34 @@ export function MealForm({
             )
           )}
         </div>
-        <Popover open={open && suggestions.length > 0} onOpenChange={setOpen}>
-          <PopoverAnchor asChild>
-            <Input
-              id="ingredient-draft"
-              value={draft}
-              placeholder="Entrée ou virgule pour ajouter"
-              onChange={(event) => {
-                setDraft(event.target.value)
-                setOpen(true)
-              }}
-              onKeyDown={onDraftKeyDown}
-              onBlur={() => {
-                if (draft.trim()) addIngredient(draft)
-              }}
-            />
-          </PopoverAnchor>
-          <PopoverContent
-            align="start"
-            className="w-[var(--radix-popover-trigger-width)] p-1"
-            onOpenAutoFocus={(event) => event.preventDefault()}
+        <Input
+          id="ingredient-draft"
+          value={draft}
+          placeholder="Entrée ou virgule pour ajouter"
+          onChange={(event) => {
+            setDraft(event.target.value)
+            setOpen(true)
+          }}
+          onKeyDown={onDraftKeyDown}
+        />
+        {open && suggestions.length > 0 ? (
+          <ul
+            className="flex max-h-40 flex-col gap-1 overflow-y-auto rounded-lg border border-border bg-surface p-1 shadow-sm"
+            aria-label="Suggestions d'ingrédients"
           >
-            <ul>
-              {suggestions.map((item) => (
-                <li key={item.id}>
-                  <button
-                    type="button"
-                    className="tap-press flex min-h-12 w-full items-center rounded-md px-3 text-left text-sm hover:bg-muted"
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => addIngredient(item.name)}
-                  >
-                    {item.name}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </PopoverContent>
-        </Popover>
+            {suggestions.slice(0, 5).map((item) => (
+              <li key={item.id}>
+                <button
+                  type="button"
+                  className="tap-press flex min-h-10 w-full items-center rounded-md px-3 text-left text-sm hover:bg-muted"
+                  onClick={() => addIngredient(item.name)}
+                >
+                  {item.name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </div>
 
       <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
@@ -238,7 +244,14 @@ export function MealForm({
           </Button>
         ) : null}
         <Button type="submit" className="min-h-12" disabled={pending}>
-          {submitLabel}
+          {pending ? (
+            <>
+              <Loader2 className="mr-2 size-4 animate-spin" />
+              Enregistrement…
+            </>
+          ) : (
+            submitLabel
+          )}
         </Button>
       </div>
     </form>

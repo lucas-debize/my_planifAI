@@ -223,7 +223,7 @@ export function ShoppingBoard({
                     <button
                       type="button"
                       className={cn(
-                        "tap-press min-h-10 flex-1 truncate rounded-[0.5rem] px-1 text-left",
+                        "tap-press min-h-10 flex-1 min-w-0 rounded-[0.5rem] px-1 text-left break-words line-clamp-2 leading-snug",
                         line.checked && "text-muted-foreground line-through"
                       )}
                       onClick={() => startEdit(line)}
@@ -256,7 +256,7 @@ export function ShoppingBoard({
         </ul>
       )}
       <form
-        className="mt-4 flex items-center gap-2 px-4 pb-8 md:px-8"
+        className="mt-4 flex w-full items-center gap-2 px-4 pb-8 md:px-8"
         onSubmit={(event) => void onAdd(event)}
       >
         <Input
@@ -264,6 +264,7 @@ export function ShoppingBoard({
           maxLength={80}
           placeholder="Ajouter un article"
           aria-label="Ajouter un article"
+          className="flex-1 min-w-0"
           onChange={(event) => setDraft(event.target.value)}
         />
         <button

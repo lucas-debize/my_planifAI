@@ -70,16 +70,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <div className="flex min-h-dvh flex-1 flex-col">
-        <div className="flex-1 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-0">
+      <div className="flex min-h-dvh min-w-0 flex-1 flex-col overflow-x-hidden">
+        <div className="flex-1 min-w-0 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-0">
           {children}
         </div>
         <nav
           aria-label="Principal"
-          className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface md:hidden"
-          style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+          className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] md:hidden"
         >
-          <ul className="grid grid-cols-3">
+          <ul className="grid grid-cols-3 py-1">
             {NAV.map((item) => {
               const Icon = item.icon
               const active = isActive(pathname, item.href)

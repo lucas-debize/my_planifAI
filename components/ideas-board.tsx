@@ -48,6 +48,32 @@ export function IdeasBoard({ meals }: { meals: MealWithIngredients[] }) {
           actionLabel="Nouvelle idée"
           actionHref="/idees/nouvelle"
         />
+      ) : filtered.length === 0 ? (
+        <div className="mx-4 mt-6 flex flex-col items-center justify-center rounded-[1rem] border border-dashed border-border bg-surface/50 p-8 text-center md:mx-8">
+          <p className="font-fraunces text-lg text-ink">
+            Aucun plat ne correspond à «&nbsp;{query.trim()}&nbsp;»
+          </p>
+          <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+            Vérifie l’orthographe ou ajoute une nouvelle idée dans ton carnet.
+          </p>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setQuery("")}
+            >
+              Effacer la recherche
+            </Button>
+            <Button asChild size="sm">
+              <Link
+                href={`/idees/nouvelle?nom=${encodeURIComponent(query.trim())}`}
+              >
+                Créer «&nbsp;{query.trim()}&nbsp;»
+              </Link>
+            </Button>
+          </div>
+        </div>
       ) : (
         <ul className="mt-4 grid gap-3 px-4 pb-8 md:grid-cols-2 md:px-8">
           {filtered.map((meal) => (
@@ -56,7 +82,9 @@ export function IdeasBoard({ meals }: { meals: MealWithIngredients[] }) {
                 href={`/idees/${meal.id}`}
                 className="tap-press block min-h-20 rounded-[1rem] bg-surface p-4 shadow-card"
               >
-                <p className="font-fraunces text-xl">{meal.name}</p>
+                <p className="font-fraunces text-xl break-words line-clamp-2">
+                  {meal.name}
+                </p>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {ingredientCountLabel(meal.ingredients.length)}
                 </p>

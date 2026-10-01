@@ -35,11 +35,14 @@ export function EditMealPage({
     <>
       <PageHeader
         title={meal.name}
+        backHref="/idees"
+        backLabel="Retour aux idées"
         actions={
           <Button
             type="button"
             variant="destructive"
-            className="min-h-12"
+            size="sm"
+            className="min-h-10 text-xs sm:min-h-12 sm:text-sm"
             onClick={() => setOpen(true)}
           >
             Supprimer
@@ -50,6 +53,8 @@ export function EditMealPage({
         <MealForm
           meal={meal}
           knownIngredients={knownIngredients}
+          submitLabel="Modifier le plat"
+          onCancel={() => router.push("/idees")}
           onSaved={() => router.push("/idees")}
         />
       </div>

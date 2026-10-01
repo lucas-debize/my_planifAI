@@ -42,8 +42,8 @@ export function SlotCard({
       <span className="text-sm text-muted-foreground">{label}</span>
       <span
         className={cn(
-          "font-fraunces",
-          size === "xl" ? "text-2xl" : "text-lg",
+          "font-fraunces break-words line-clamp-2 leading-snug",
+          size === "xl" ? "text-2xl" : "text-base sm:text-lg",
           filled ? "text-ink" : "text-muted-foreground"
         )}
       >
