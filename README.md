@@ -19,11 +19,12 @@ L'application tourne gratuitement 24h/24 sans mise en veille :
 ### Étape 1 : Base de données Supabase (5 min)
 
 1. Crée un projet gratuit sur [supabase.com](https://supabase.com) (choisis `eu-central-1` Francfort ou `eu-west-1` Londres).
-2. Ouvre le **SQL Editor** dans le tableau de bord Supabase et exécute séquentiellement les scripts du dossier `supabase/migrations/` :
+2. Ouvre le **SQL Editor** dans le tableau de bord Supabase et exécute les scripts de `supabase/migrations/` (ou `full_setup.sql`) :
    - `001_init.sql` (tables repas, créneaux, courses, profils, RLS)
    - `002_families.sql` (gestion des familles et partages)
    - `003_fix_family_rls.sql` (politiques RLS affinées)
-3. Va dans **Project Settings → API** et note :
+   - `004_separate_personal_and_family.sql` (séparation planning perso/famille, limite 10 membres)
+   *(Ou directement via le terminal avec la commande : `npx supabase db push`)*
    - **Project URL** (`https://<id-projet>.supabase.co`)
    - **anon public key** (`sb_publishable_...` ou clé `anon`)
    *(Ne partage jamais la clé `service_role`)*.
