@@ -1,8 +1,9 @@
 import { addDays } from "date-fns"
 import { redirect } from "next/navigation"
 import { WeekBoard } from "@/components/week-board"
-import { listMeals } from "@/lib/actions/meals"
+import { listMeals, listPersonalMeals } from "@/lib/actions/meals"
 import { getWeekSlots } from "@/lib/actions/slots"
+import { getPlanningScope } from "@/lib/actions/session"
 import {
   currentMondayIso,
   isMonday,
@@ -28,11 +29,15 @@ export default async function SemainePage({
   }
 
   const nextStart = toISODate(addDays(parsed, 7))
-  const [slots, nextSlots, meals] = await Promise.all([
+  const [scope, slots, nextSlots, meals] = await Promise.all([
+    getPlanningScope(),
     getWeekSlots(weekStart),
     getWeekSlots(nextStart),
     listMeals(),
   ])
+
+  const personalMeals =
+    scope.type === "family" ? await listPersonalMeals() : []
 
   return (
     <WeekBoard
@@ -43,6 +48,8 @@ export default async function SemainePage({
         { start: nextStart, slots: nextSlots },
       ]}
       meals={meals}
+      personalMeals={personalMeals}
+      isFamilyMode={scope.type === "family"}
     />
   )
 }

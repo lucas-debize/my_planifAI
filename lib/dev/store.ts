@@ -8,6 +8,8 @@ export type MealRow = {
   user_id: string
   name: string
   origin: "user" | "ai"
+  family_id?: string | null
+  created_by_user_id?: string | null
   created_at: string
   updated_at: string
 }
@@ -17,6 +19,7 @@ export type IngredientRow = {
   user_id: string
   name: string
   name_normalized: string
+  family_id?: string | null
 }
 
 export type MealIngredientRow = {
@@ -31,13 +34,16 @@ export type PlanSlotRow = {
   slot_date: string
   slot_kind: "dejeuner" | "diner"
   meal_id: string | null
+  family_id?: string | null
 }
 
 export type ShoppingCheckRow = {
+  id?: string
   user_id: string
   week_start: string
   ingredient_id: string
   checked: boolean
+  family_id?: string | null
 }
 
 export type DevStore = {

@@ -24,8 +24,8 @@ export function NewMealPage({
   const slotKind = (kind === "lunch" || kind === "dinner" ? kind : null) as SlotKind | null
   const parsedDate = date ? parseISODate(date) : null
   const dateLabel = parsedDate ? slotTitleDate(parsedDate) : date
-  const title = isSlot && slotKind
-    ? `Nouvelle idée · ${SLOT_LABEL[slotKind]}`
+  const title = isSlot && slotKind && dateLabel
+    ? `Nouvelle idée · ${SLOT_LABEL[slotKind]} · ${dateLabel}`
     : "Nouvelle idée"
 
   async function onSaved(saved: MealWithIngredients) {

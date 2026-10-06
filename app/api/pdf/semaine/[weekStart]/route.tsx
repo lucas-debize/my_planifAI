@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { WeekDocument } from "@/components/pdf/week-document"
 import { createClient } from "@/lib/supabase/server"
 import { getWeekSlots } from "@/lib/domain/slots"
+import { getPlanningScope } from "@/lib/actions/session"
 import { isMonday, parseISODate, weekLabel } from "@/lib/dates"
 
 export const runtime = "nodejs"
@@ -23,9 +24,12 @@ export async function GET(
   if (!parsed || !isMonday(parsed)) {
     return new NextResponse("Bad Request", { status: 400 })
   }
-
-  const slots = await getWeekSlots(supabase, userId, weekStart)
-
+  const scope = await getPlanningScope()
+  const slotScope =
+    scope.type === "family" && scope.familyId
+      ? { type: "family" as const, familyId: scope.familyId, userId }
+      : { type: "personal" as const, userId }
+  const slots = await getWeekSlots(supabase, slotScope, weekStart)
   const buffer = await renderToBuffer(
     <WeekDocument weekLabel={weekLabel(parsed)} slots={slots} />
   )

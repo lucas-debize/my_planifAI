@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { ArrowLeft, UserRound } from "lucide-react"
-
+import { WorkspaceSwitcher } from "@/components/workspace-switcher"
 export function PageHeader({
   title,
   actions,
@@ -32,6 +32,7 @@ export function PageHeader({
       </h1>
       <div className="flex shrink-0 items-center gap-2">
         {actions}
+        <WorkspaceSwitcher compact className="md:hidden" />
         {showAccount ? (
           <Link
             href="/compte"

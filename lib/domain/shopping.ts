@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/lib/database.types"
-import { getWeekSlots } from "@/lib/domain/slots"
+import { getWeekSlots, type SlotScope } from "@/lib/domain/slots"
 import { displayName, normalizeName } from "@/lib/ingredients"
 
 type Client = SupabaseClient<Database>
@@ -11,6 +11,10 @@ export type ShopLine = {
   checked: boolean
   extra: boolean
 }
+
+export type ShoppingScope =
+  | { type: "personal"; userId: string }
+  | { type: "family"; familyId: string; userId: string }
 
 function asIngredient(
   value:
@@ -25,10 +29,15 @@ function asIngredient(
 
 async function plannedIngredientIds(
   supabase: Client,
-  userId: string,
+  scope: ShoppingScope,
   weekStart: string
 ): Promise<Set<string>> {
-  const slots = await getWeekSlots(supabase, userId, weekStart)
+  const slotScope: SlotScope =
+    scope.type === "family"
+      ? { type: "family", familyId: scope.familyId, userId: scope.userId }
+      : { type: "personal", userId: scope.userId }
+
+  const slots = await getWeekSlots(supabase, slotScope, weekStart)
   const mealIds = [
     ...new Set(
       slots.map((slot) => slot.meal?.id).filter((id): id is string => Boolean(id))
@@ -52,7 +61,7 @@ async function plannedIngredientIds(
 
 async function getOrCreateIngredient(
   supabase: Client,
-  userId: string,
+  scope: ShoppingScope,
   rawName: string
 ): Promise<{ id: string; name: string }> {
   const name = displayName(rawName)
@@ -60,32 +69,49 @@ async function getOrCreateIngredient(
   if (name.length > 80) throw new Error("INGREDIENT_NAME_REQUIRED")
   const nameNormalized = normalizeName(name)
 
-  const { error: upsertError } = await supabase.from("ingredients").upsert(
-    {
-      user_id: userId,
-      name,
-      name_normalized: nameNormalized,
-    },
-    { onConflict: "user_id,name_normalized", ignoreDuplicates: true }
-  )
-  if (upsertError) throw new Error(upsertError.message)
-
-  const { data, error } = await supabase
+  const isFamily = scope.type === "family"
+  let fetchQuery = supabase
     .from("ingredients")
     .select("id, name")
-    .eq("user_id", userId)
     .eq("name_normalized", nameNormalized)
-    .maybeSingle()
-  if (error || !data) throw new Error(error?.message ?? "INGREDIENT_NOT_FOUND")
-  return data
+
+  if (isFamily) {
+    fetchQuery = fetchQuery.eq("family_id", scope.familyId)
+  } else {
+    fetchQuery = fetchQuery.eq("user_id", scope.userId).is("family_id", null)
+  }
+
+  const { data: existing } = await fetchQuery.maybeSingle()
+  if (existing) return existing
+
+  const { data: created, error: insertError } = await supabase
+    .from("ingredients")
+    .insert({
+      user_id: scope.userId,
+      family_id: isFamily ? scope.familyId : null,
+      name,
+      name_normalized: nameNormalized,
+    })
+    .select("id, name")
+    .single()
+
+  if (insertError || !created) {
+    throw new Error(insertError?.message ?? "INGREDIENT_NOT_FOUND")
+  }
+  return created
 }
 
 export async function listWeekIngredients(
   supabase: Client,
-  userId: string,
+  scope: ShoppingScope,
   weekStart: string
 ): Promise<ShopLine[]> {
-  const slots = await getWeekSlots(supabase, userId, weekStart)
+  const slotScope: SlotScope =
+    scope.type === "family"
+      ? { type: "family", familyId: scope.familyId, userId: scope.userId }
+      : { type: "personal", userId: scope.userId }
+
+  const slots = await getWeekSlots(supabase, slotScope, weekStart)
   const mealIds = [
     ...new Set(
       slots.map((slot) => slot.meal?.id).filter((id): id is string => Boolean(id))
@@ -110,30 +136,47 @@ export async function listWeekIngredients(
   }
 
   const plannedIds = new Set(unique.keys())
+  const isFamily = scope.type === "family"
 
-  const { data: checks, error: checkError } = await supabase
+  let checkQuery = supabase
     .from("shopping_checks")
     .select("ingredient_id, checked")
-    .eq("user_id", userId)
     .eq("week_start", weekStart)
+
+  if (isFamily) {
+    checkQuery = checkQuery.eq("family_id", scope.familyId)
+  } else {
+    checkQuery = checkQuery.eq("user_id", scope.userId).is("family_id", null)
+  }
+
+  const { data: checks, error: checkError } = await checkQuery
   if (checkError) throw new Error(checkError.message)
 
   const checkedById = new Map(
     (checks ?? []).map((row) => [row.ingredient_id, row.checked])
   )
 
-  const extraIds = [...new Set(
-    (checks ?? [])
-      .map((row) => row.ingredient_id)
-      .filter((id) => !plannedIds.has(id))
-  )]
+  const extraIds = [
+    ...new Set(
+      (checks ?? [])
+        .map((row) => row.ingredient_id)
+        .filter((id) => !plannedIds.has(id))
+    ),
+  ]
 
   if (extraIds.length > 0) {
-    const { data: extras, error: extraError } = await supabase
+    let extraQuery = supabase
       .from("ingredients")
       .select("id, name")
-      .eq("user_id", userId)
       .in("id", extraIds)
+
+    if (isFamily) {
+      extraQuery = extraQuery.eq("family_id", scope.familyId)
+    } else {
+      extraQuery = extraQuery.eq("user_id", scope.userId).is("family_id", null)
+    }
+
+    const { data: extras, error: extraError } = await extraQuery
     if (extraError) throw new Error(extraError.message)
     for (const row of extras ?? []) {
       unique.set(row.id, row.name)
@@ -152,72 +195,108 @@ export async function listWeekIngredients(
 
 export async function toggleShopCheck(
   supabase: Client,
-  userId: string,
+  scope: ShoppingScope,
   input: { weekStart: string; ingredientId: string; checked: boolean }
 ): Promise<void> {
-  const { error } = await supabase.from("shopping_checks").upsert(
-    {
-      user_id: userId,
-      week_start: input.weekStart,
-      ingredient_id: input.ingredientId,
-      checked: input.checked,
-    },
-    { onConflict: "user_id,week_start,ingredient_id" }
-  )
-  if (error) throw new Error(error.message)
+  const isFamily = scope.type === "family"
+
+  let deleteQuery = supabase
+    .from("shopping_checks")
+    .delete()
+    .eq("week_start", input.weekStart)
+    .eq("ingredient_id", input.ingredientId)
+
+  if (isFamily) {
+    deleteQuery = deleteQuery.eq("family_id", scope.familyId)
+  } else {
+    deleteQuery = deleteQuery.eq("user_id", scope.userId).is("family_id", null)
+  }
+
+  const { error: deleteError } = await deleteQuery
+  if (deleteError) throw new Error(deleteError.message)
+
+  const { error: insertError } = await supabase.from("shopping_checks").insert({
+    family_id: isFamily ? scope.familyId : null,
+    user_id: scope.userId,
+    week_start: input.weekStart,
+    ingredient_id: input.ingredientId,
+    checked: input.checked,
+  })
+
+  if (insertError) throw new Error(insertError.message)
 }
 
 export async function renameShopItem(
   supabase: Client,
-  userId: string,
+  scope: ShoppingScope,
   input: { ingredientId: string; name: string }
 ): Promise<{ name: string }> {
   const name = displayName(input.name)
   if (!name) throw new Error("INGREDIENT_NAME_REQUIRED")
   if (name.length > 80) throw new Error("INGREDIENT_NAME_REQUIRED")
   const nameNormalized = normalizeName(name)
+  const isFamily = scope.type === "family"
 
-  const { data: current, error: currentError } = await supabase
+  let currentQuery = supabase
     .from("ingredients")
     .select("id, name_normalized")
-    .eq("user_id", userId)
     .eq("id", input.ingredientId)
-    .maybeSingle()
+
+  if (isFamily) {
+    currentQuery = currentQuery.eq("family_id", scope.familyId)
+  } else {
+    currentQuery = currentQuery.eq("user_id", scope.userId).is("family_id", null)
+  }
+
+  const { data: current, error: currentError } = await currentQuery.maybeSingle()
   if (currentError) throw new Error(currentError.message)
   if (!current) throw new Error("INGREDIENT_NOT_FOUND")
 
   if (current.name_normalized !== nameNormalized) {
-    const { data: clash, error: clashError } = await supabase
+    let clashQuery = supabase
       .from("ingredients")
       .select("id")
-      .eq("user_id", userId)
       .eq("name_normalized", nameNormalized)
-      .maybeSingle()
+
+    if (isFamily) {
+      clashQuery = clashQuery.eq("family_id", scope.familyId)
+    } else {
+      clashQuery = clashQuery.eq("user_id", scope.userId).is("family_id", null)
+    }
+
+    const { data: clash, error: clashError } = await clashQuery.maybeSingle()
     if (clashError) throw new Error(clashError.message)
     if (clash) throw new Error("INGREDIENT_EXISTS")
   }
 
-  const { error } = await supabase
+  let updateQuery = supabase
     .from("ingredients")
     .update({ name, name_normalized: nameNormalized })
     .eq("id", input.ingredientId)
-    .eq("user_id", userId)
+
+  if (isFamily) {
+    updateQuery = updateQuery.eq("family_id", scope.familyId)
+  } else {
+    updateQuery = updateQuery.eq("user_id", scope.userId).is("family_id", null)
+  }
+
+  const { error } = await updateQuery
   if (error) throw new Error(error.message)
   return { name }
 }
 
 export async function addWeekItem(
   supabase: Client,
-  userId: string,
+  scope: ShoppingScope,
   input: { weekStart: string; name: string }
 ): Promise<ShopLine> {
-  const ingredient = await getOrCreateIngredient(supabase, userId, input.name)
-  await toggleShopCheck(supabase, userId, {
+  const ingredient = await getOrCreateIngredient(supabase, scope, input.name)
+  await toggleShopCheck(supabase, scope, {
     weekStart: input.weekStart,
     ingredientId: ingredient.id,
     checked: false,
   })
-  const planned = await plannedIngredientIds(supabase, userId, input.weekStart)
+  const planned = await plannedIngredientIds(supabase, scope, input.weekStart)
   return {
     ingredientId: ingredient.id,
     name: ingredient.name,
@@ -228,18 +307,27 @@ export async function addWeekItem(
 
 export async function removeWeekItem(
   supabase: Client,
-  userId: string,
+  scope: ShoppingScope,
   input: { weekStart: string; ingredientId: string }
 ): Promise<void> {
-  const planned = await plannedIngredientIds(supabase, userId, input.weekStart)
+  const planned = await plannedIngredientIds(supabase, scope, input.weekStart)
   if (planned.has(input.ingredientId)) {
     throw new Error("INGREDIENT_FROM_MEAL")
   }
-  const { error } = await supabase
+
+  const isFamily = scope.type === "family"
+  let deleteQuery = supabase
     .from("shopping_checks")
     .delete()
-    .eq("user_id", userId)
     .eq("week_start", input.weekStart)
     .eq("ingredient_id", input.ingredientId)
+
+  if (isFamily) {
+    deleteQuery = deleteQuery.eq("family_id", scope.familyId)
+  } else {
+    deleteQuery = deleteQuery.eq("user_id", scope.userId).is("family_id", null)
+  }
+
+  const { error } = await deleteQuery
   if (error) throw new Error(error.message)
 }

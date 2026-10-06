@@ -104,8 +104,7 @@ export async function joinFamily(
  * Leave current family group.
  */
 export async function leaveFamily(
-  supabase: Client,
-  _authUid: string
+  supabase: Client
 ): Promise<void> {
   const { error } = await supabase.rpc("leave_family")
   if (error) throw new Error(mapFamilyError(error, error.message))
@@ -115,8 +114,7 @@ export async function leaveFamily(
  * Delete a family (admin only — CASCADE deletes all memberships).
  */
 export async function deleteFamily(
-  supabase: Client,
-  _authUid: string
+  supabase: Client
 ): Promise<void> {
   const { error } = await supabase.rpc("delete_family")
   if (error) throw new Error(mapFamilyError(error, error.message))

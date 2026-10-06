@@ -1,7 +1,9 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
+import { cookies } from "next/headers"
 import { createClient } from "@/lib/supabase/server"
+import { SCOPE_COOKIE } from "@/lib/domain/session"
 import { getCurrentIdentity } from "@/lib/accounts/identity"
 import {
   createFamily as createFamilyDomain,
@@ -35,6 +37,8 @@ export async function createFamilyAction(
     const uid = await authUid()
     const supabase = await createClient()
     await createFamilyDomain(supabase, uid, name, await displayName())
+    const cookieStore = await cookies()
+    cookieStore.set(SCOPE_COOKIE, "family", { path: "/" })
     revalidatePath("/", "layout")
     return null
   } catch (err) {
@@ -54,6 +58,8 @@ export async function joinFamilyAction(
     const uid = await authUid()
     const supabase = await createClient()
     await joinFamilyDomain(supabase, uid, code, await displayName())
+    const cookieStore = await cookies()
+    cookieStore.set(SCOPE_COOKIE, "family", { path: "/" })
     revalidatePath("/", "layout")
     return null
   } catch (err) {
@@ -62,15 +68,18 @@ export async function joinFamilyAction(
 }
 
 export async function leaveFamilyAction(): Promise<void> {
-  const uid = await authUid()
+  await authUid()
   const supabase = await createClient()
-  await leaveFamilyDomain(supabase, uid)
+  await leaveFamilyDomain(supabase)
+  const cookieStore = await cookies()
+  cookieStore.set(SCOPE_COOKIE, "personal", { path: "/" })
   revalidatePath("/", "layout")
 }
-
 export async function deleteFamilyAction(): Promise<void> {
-  const uid = await authUid()
+  await authUid()
   const supabase = await createClient()
-  await deleteFamilyDomain(supabase, uid)
+  await deleteFamilyDomain(supabase)
+  const cookieStore = await cookies()
+  cookieStore.set(SCOPE_COOKIE, "personal", { path: "/" })
   revalidatePath("/", "layout")
 }

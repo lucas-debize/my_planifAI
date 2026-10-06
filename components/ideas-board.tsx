@@ -1,16 +1,43 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, useTransition } from "react"
 import Link from "next/link"
+import { Download, Users } from "lucide-react"
+import { toast } from "sonner"
 import { PageHeader } from "@/components/page-header"
 import { EmptyState } from "@/components/empty-state"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { ingredientCountLabel } from "@/components/meal-picker"
+import { importPersonalMealsAction } from "@/lib/actions/meals"
+import { actionErrorMessage } from "@/lib/errors"
 import type { MealWithIngredients } from "@/lib/domain/meals"
 
-export function IdeasBoard({ meals }: { meals: MealWithIngredients[] }) {
+export function IdeasBoard({
+  meals,
+  personalMeals = [],
+  isFamilyMode = false,
+  scopeDisplayName,
+}: {
+  meals: MealWithIngredients[]
+  personalMeals?: MealWithIngredients[]
+  isFamilyMode?: boolean
+  scopeDisplayName?: string
+}) {
   const [query, setQuery] = useState("")
+  const [importOpen, setImportOpen] = useState(false)
+  const [selectedMealIds, setSelectedMealIds] = useState<Set<string>>(new Set())
+  const [isImporting, startImportTransition] = useTransition()
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -24,17 +51,85 @@ export function IdeasBoard({ meals }: { meals: MealWithIngredients[] }) {
     })
   }, [meals, query])
 
+  function toggleMeal(id: string) {
+    setSelectedMealIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleAll() {
+    if (selectedMealIds.size === personalMeals.length) {
+      setSelectedMealIds(new Set())
+    } else {
+      setSelectedMealIds(new Set(personalMeals.map((m) => m.id)))
+    }
+  }
+
+  function handleImport() {
+    if (selectedMealIds.size === 0) return
+    const ids = Array.from(selectedMealIds)
+    startImportTransition(async () => {
+      try {
+        await importPersonalMealsAction({ mealIds: ids })
+        toast.success(
+          `${ids.length} recette${ids.length > 1 ? "s" : ""} importée${ids.length > 1 ? "s" : ""} dans la famille`
+        )
+        setImportOpen(false)
+        setSelectedMealIds(new Set())
+      } catch (err) {
+        toast.error(actionErrorMessage(err))
+      }
+    })
+  }
+
   return (
     <>
       <PageHeader
         title="Idées"
         actions={
-          <Button asChild className="min-h-12">
-            <Link href="/idees/nouvelle">Nouvelle idée</Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            {isFamilyMode && personalMeals.length > 0 ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-12 gap-1.5"
+                onClick={() => {
+                  setSelectedMealIds(new Set(personalMeals.map((m) => m.id)))
+                  setImportOpen(true)
+                }}
+              >
+                <Download className="size-4" />
+                <span className="hidden sm:inline">Importer mes recettes perso</span>
+                <span className="sm:hidden">Importer</span>
+              </Button>
+            ) : null}
+            <Button asChild className="min-h-12">
+              <Link href="/idees/nouvelle">Nouvelle idée</Link>
+            </Button>
+          </div>
         }
       />
-      <div className="px-4 md:px-8">
+
+      <div className="flex flex-col gap-3 px-4 md:px-8">
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+            {isFamilyMode ? (
+              <>
+                <Users className="size-3.5" />
+                <span>Espace {scopeDisplayName ?? "Famille"}</span>
+              </>
+            ) : (
+              <span>Espace Personnel</span>
+            )}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {meals.length} plat{meals.length > 1 ? "s" : ""} au catalogue
+          </span>
+        </div>
+
         <Input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
@@ -42,6 +137,7 @@ export function IdeasBoard({ meals }: { meals: MealWithIngredients[] }) {
           aria-label="Rechercher un plat ou un ingrédient"
         />
       </div>
+
       {meals.length === 0 ? (
         <EmptyState
           message="Tes plats restent ici. Tu les reposes sur n’importe quelle semaine."
@@ -80,11 +176,24 @@ export function IdeasBoard({ meals }: { meals: MealWithIngredients[] }) {
             <li key={meal.id}>
               <Link
                 href={`/idees/${meal.id}`}
-                className="tap-press block min-h-20 rounded-[1rem] bg-surface p-4 shadow-card"
+                className="tap-press block min-h-20 rounded-[1rem] bg-surface p-4 shadow-card hover:bg-muted/40 transition-colors"
               >
-                <p className="font-fraunces text-xl break-words line-clamp-2">
-                  {meal.name}
-                </p>
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-fraunces text-xl break-words line-clamp-2">
+                    {meal.name}
+                  </p>
+                  {isFamilyMode ? (
+                    meal.createdByName ? (
+                      <span className="shrink-0 rounded-full bg-muted/80 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                        Ajouté par {meal.createdByName}
+                      </span>
+                    ) : meal.origin === "ai" ? (
+                      <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                        Par IA
+                      </span>
+                    ) : null
+                  ) : null}
+                </div>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {ingredientCountLabel(meal.ingredients.length)}
                 </p>
@@ -93,6 +202,84 @@ export function IdeasBoard({ meals }: { meals: MealWithIngredients[] }) {
           ))}
         </ul>
       )}
+
+      {/* Dialogue d'import des recettes perso */}
+      {isFamilyMode ? (
+        <Dialog open={importOpen} onOpenChange={setImportOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="font-fraunces text-lg">
+                Importer mes recettes perso
+              </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground">
+                Copiez vos recettes personnelles vers le catalogue de la famille. En cas
+                de doublon de nom, elles seront automatiquement renommées avec votre prénom.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="flex items-center justify-between border-b pb-2 pt-1 text-xs">
+              <span className="text-muted-foreground">
+                {selectedMealIds.size} sélectionnée{selectedMealIds.size > 1 ? "s" : ""} sur{" "}
+                {personalMeals.length}
+              </span>
+              <button
+                type="button"
+                onClick={toggleAll}
+                className="font-medium text-primary hover:underline"
+              >
+                {selectedMealIds.size === personalMeals.length
+                  ? "Tout désélectionner"
+                  : "Tout sélectionner"}
+              </button>
+            </div>
+
+            <ScrollArea className="max-h-64 py-1">
+              <div className="flex flex-col gap-2">
+                {personalMeals.map((meal) => {
+                  const checked = selectedMealIds.has(meal.id)
+                  return (
+                    <label
+                      key={meal.id}
+                      className="flex cursor-pointer items-center gap-3 rounded-lg p-2 hover:bg-muted"
+                    >
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={() => toggleMeal(meal.id)}
+                      />
+                      <div className="flex min-w-0 flex-1 flex-col">
+                        <span className="truncate text-sm font-medium">{meal.name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {ingredientCountLabel(meal.ingredients.length)}
+                        </span>
+                      </div>
+                    </label>
+                  )
+                })}
+              </div>
+            </ScrollArea>
+
+            <DialogFooter className="mt-2">
+              <Button
+                variant="outline"
+                type="button"
+                onClick={() => setImportOpen(false)}
+                disabled={isImporting}
+              >
+                Annuler
+              </Button>
+              <Button
+                type="button"
+                onClick={handleImport}
+                disabled={selectedMealIds.size === 0 || isImporting}
+              >
+                {isImporting
+                  ? "Import en cours..."
+                  : `Importer (${selectedMealIds.size})`}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      ) : null}
     </>
   )
 }

@@ -192,15 +192,24 @@ function FamilySection({
       </section>
     )
   }
+  const isFull = members.length >= 10
 
   return (
     <section className="flex flex-col gap-3">
       <h2 className="text-sm font-medium text-ink">
         Groupe familial — {family.name}
       </h2>
-
       <div className="flex flex-col gap-1">
-        <span className="text-xs text-muted-foreground">Membres</span>
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-medium text-muted-foreground">
+            Membres ({members.length}/10)
+          </span>
+          {isFull ? (
+            <span className="inline-flex items-center rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+              Groupe complet (10/10)
+            </span>
+          ) : null}
+        </div>
         <ul className="flex flex-col gap-1">
           {members.map((m) => (
             <li
@@ -224,32 +233,40 @@ function FamilySection({
         </ul>
       </div>
 
-      <div className="flex flex-col gap-1">
-        <span className="text-xs text-muted-foreground">
-          Code d&apos;invitation — partage-le pour inviter ta famille
-        </span>
-        <div className="flex items-center gap-2">
-          <code className="flex-1 rounded-[0.75rem] border border-line bg-surface px-3 py-2 text-sm font-mono tracking-wider">
-            {family.invite_code}
-          </code>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="min-h-10 shrink-0"
-            onClick={() => {
-              void navigator.clipboard.writeText(family.invite_code)
-              if (codeRef.current) codeRef.current.textContent = "Copié !"
-              setTimeout(() => {
-                if (codeRef.current) codeRef.current.textContent = "Copier"
-              }, 2000)
-            }}
-          >
-            <span ref={codeRef}>Copier</span>
-          </Button>
+      {isFull ? (
+        <div className="flex flex-col gap-1 rounded-[0.75rem] border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">
+          <p className="font-semibold">La limite maximale de 10 personnes est atteinte</p>
+          <p className="text-muted-foreground dark:text-amber-300/80">
+            Le partage du code d&apos;invitation est désactivé. Supprimez des membres ou quittez le groupe pour libérer des places.
+          </p>
         </div>
-      </div>
-
+      ) : (
+        <div className="flex flex-col gap-1">
+          <span className="text-xs text-muted-foreground">
+            Code d&apos;invitation — partage-le pour inviter ta famille
+          </span>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 rounded-[0.75rem] border border-line bg-surface px-3 py-2 text-sm font-mono tracking-wider">
+              {family.invite_code}
+            </code>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="min-h-10 shrink-0"
+              onClick={() => {
+                void navigator.clipboard.writeText(family.invite_code)
+                if (codeRef.current) codeRef.current.textContent = "Copié !"
+                setTimeout(() => {
+                  if (codeRef.current) codeRef.current.textContent = "Copier"
+                }, 2000)
+              }}
+            >
+              <span ref={codeRef}>Copier</span>
+            </Button>
+          </div>
+        </div>
+      )}
       <div className="flex flex-col gap-2 sm:flex-row">
         {!isAdmin ? (
           <form action={leaveFamilyAction}>

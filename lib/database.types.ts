@@ -15,6 +15,8 @@ export type Database = {
           user_id: string
           name: string
           origin: "user" | "ai"
+          family_id: string | null
+          created_by_user_id: string | null
           created_at: string
           updated_at: string
         }
@@ -23,6 +25,8 @@ export type Database = {
           user_id: string
           name: string
           origin?: "user" | "ai"
+          family_id?: string | null
+          created_by_user_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -31,6 +35,8 @@ export type Database = {
           user_id?: string
           name?: string
           origin?: "user" | "ai"
+          family_id?: string | null
+          created_by_user_id?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -42,18 +48,21 @@ export type Database = {
           user_id: string
           name: string
           name_normalized: string
+          family_id: string | null
         }
         Insert: {
           id?: string
           user_id: string
           name: string
           name_normalized?: string
+          family_id?: string | null
         }
         Update: {
           id?: string
           user_id?: string
           name?: string
           name_normalized?: string
+          family_id?: string | null
         }
         Relationships: []
       }
@@ -97,6 +106,7 @@ export type Database = {
           slot_date: string
           slot_kind: "dejeuner" | "diner"
           meal_id: string | null
+          family_id: string | null
         }
         Insert: {
           id?: string
@@ -104,6 +114,7 @@ export type Database = {
           slot_date: string
           slot_kind: "dejeuner" | "diner"
           meal_id?: string | null
+          family_id?: string | null
         }
         Update: {
           id?: string
@@ -111,6 +122,7 @@ export type Database = {
           slot_date?: string
           slot_kind?: "dejeuner" | "diner"
           meal_id?: string | null
+          family_id?: string | null
         }
         Relationships: [
           {
@@ -124,22 +136,28 @@ export type Database = {
       }
       shopping_checks: {
         Row: {
+          id: string
           user_id: string
           week_start: string
           ingredient_id: string
           checked: boolean
+          family_id: string | null
         }
         Insert: {
+          id?: string
           user_id: string
           week_start: string
           ingredient_id: string
           checked?: boolean
+          family_id?: string | null
         }
         Update: {
+          id?: string
           user_id?: string
           week_start?: string
           ingredient_id?: string
           checked?: boolean
+          family_id?: string | null
         }
         Relationships: [
           {
@@ -225,6 +243,10 @@ export type Database = {
         Returns: string
       }
       is_family_owner: {
+        Args: { fid: string }
+        Returns: boolean
+      }
+      is_family_member: {
         Args: { fid: string }
         Returns: boolean
       }

@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/lib/database.types"
 import { parseISODate, toISODate, weekDays } from "@/lib/dates"
 import { SLOTS, type SlotKind } from "@/lib/week"
-import { getMeal } from "@/lib/domain/meals"
+import { getMeal, type MealScope } from "@/lib/domain/meals"
 
 type Client = SupabaseClient<Database>
 
@@ -11,6 +11,10 @@ export type WeekSlot = {
   slot_kind: SlotKind
   meal: { id: string; name: string } | null
 }
+
+export type SlotScope =
+  | { type: "personal"; userId: string }
+  | { type: "family"; familyId: string; userId: string }
 
 function emptyWeek(weekStart: string): WeekSlot[] {
   const monday = parseISODate(weekStart)
@@ -37,7 +41,7 @@ function asMeal(
 
 export async function getWeekSlots(
   supabase: Client,
-  userId: string,
+  scope: SlotScope,
   weekStart: string
 ): Promise<WeekSlot[]> {
   const slots = emptyWeek(weekStart)
@@ -47,13 +51,19 @@ export async function getWeekSlots(
   const from = toISODate(days[0])
   const to = toISODate(days[6])
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("plan_slots")
     .select("slot_date, slot_kind, meal:meals(id, name)")
-    .eq("user_id", userId)
     .gte("slot_date", from)
     .lte("slot_date", to)
 
+  if (scope.type === "family") {
+    query = query.eq("family_id", scope.familyId)
+  } else {
+    query = query.eq("user_id", scope.userId).is("family_id", null)
+  }
+
+  const { data, error } = await query
   if (error) throw new Error(error.message)
 
   const byKey = new Map(
@@ -71,53 +81,125 @@ export async function getWeekSlots(
 
 export async function setSlot(
   supabase: Client,
-  userId: string,
+  scope: SlotScope,
   input: { date: string; kind: SlotKind; mealId: string | null }
 ): Promise<void> {
   if (!parseISODate(input.date)) throw new Error("INVALID_DATE")
 
+  const isFamily = scope.type === "family"
+
   if (input.mealId === null) {
-    const { error } = await supabase
+    let deleteQuery = supabase
       .from("plan_slots")
       .delete()
-      .eq("user_id", userId)
       .eq("slot_date", input.date)
       .eq("slot_kind", input.kind)
+
+    if (isFamily) {
+      deleteQuery = deleteQuery.eq("family_id", scope.familyId)
+    } else {
+      deleteQuery = deleteQuery.eq("user_id", scope.userId).is("family_id", null)
+    }
+
+    const { error } = await deleteQuery
     if (error) throw new Error(error.message)
     return
   }
 
-  const meal = await getMeal(supabase, userId, input.mealId)
+  const mealScope: MealScope = isFamily
+    ? { type: "family", familyId: scope.familyId, userId: scope.userId }
+    : { type: "personal", userId: scope.userId }
+
+  const meal = await getMeal(supabase, mealScope, input.mealId)
   if (!meal) throw new Error("MEAL_NOT_FOUND")
 
-  const { error } = await supabase.from("plan_slots").upsert(
-    {
-      user_id: userId,
-      slot_date: input.date,
-      slot_kind: input.kind,
-      meal_id: input.mealId,
-    },
-    { onConflict: "user_id,slot_date,slot_kind" }
-  )
-  if (error) throw new Error(error.message)
+  // Delete existing slot at that date & kind
+  let deleteExisting = supabase
+    .from("plan_slots")
+    .delete()
+    .eq("slot_date", input.date)
+    .eq("slot_kind", input.kind)
+
+  if (isFamily) {
+    deleteExisting = deleteExisting.eq("family_id", scope.familyId)
+  } else {
+    deleteExisting = deleteExisting.eq("user_id", scope.userId).is("family_id", null)
+  }
+  await deleteExisting
+
+  // Insert the new slot
+  const { error: insertError } = await supabase.from("plan_slots").insert({
+    family_id: isFamily ? scope.familyId : null,
+    user_id: scope.userId,
+    slot_date: input.date,
+    slot_kind: input.kind,
+    meal_id: input.mealId,
+  })
+
+  if (insertError) throw new Error(insertError.message)
+}
+
+export async function setMultipleSlots(
+  supabase: Client,
+  scope: SlotScope,
+  assignments: { date: string; kind: SlotKind; mealId: string }[]
+): Promise<void> {
+  if (assignments.length === 0) return
+  const isFamily = scope.type === "family"
+
+  for (const item of assignments) {
+    if (!parseISODate(item.date)) throw new Error("INVALID_DATE")
+
+    let deleteExisting = supabase
+      .from("plan_slots")
+      .delete()
+      .eq("slot_date", item.date)
+      .eq("slot_kind", item.kind)
+
+    if (isFamily) {
+      deleteExisting = deleteExisting.eq("family_id", scope.familyId)
+    } else {
+      deleteExisting = deleteExisting.eq("user_id", scope.userId).is("family_id", null)
+    }
+    await deleteExisting
+
+    const { error: insertError } = await supabase.from("plan_slots").insert({
+      family_id: isFamily ? scope.familyId : null,
+      user_id: scope.userId,
+      slot_date: item.date,
+      slot_kind: item.kind,
+      meal_id: item.mealId,
+    })
+    if (insertError) throw new Error(insertError.message)
+  }
 }
 
 export async function copyWeek(
   supabase: Client,
-  userId: string,
+  scope: SlotScope,
   input: { fromStart: string; toStart: string }
 ): Promise<void> {
   if (input.fromStart === input.toStart) throw new Error("SAME_WEEK")
-  const fromSlots = await getWeekSlots(supabase, userId, input.fromStart)
-  const toSlots = await getWeekSlots(supabase, userId, input.toStart)
+  const fromSlots = await getWeekSlots(supabase, scope, input.fromStart)
+  const toMonday = parseISODate(input.toStart)
+  const fromMonday = parseISODate(input.fromStart)
+  if (!toMonday || !fromMonday) throw new Error("INVALID_WEEK")
 
-  for (let i = 0; i < toSlots.length; i += 1) {
-    const source = fromSlots[i]
-    const target = toSlots[i]
-    await setSlot(supabase, userId, {
-      date: target.slot_date,
-      kind: target.slot_kind,
-      mealId: source.meal?.id ?? null,
-    })
+  const toDays = weekDays(toMonday)
+  const fromDays = weekDays(fromMonday)
+
+  for (let i = 0; i < 7; i++) {
+    const fromDate = toISODate(fromDays[i])
+    const toDate = toISODate(toDays[i])
+    for (const kind of SLOTS) {
+      const fromSlot = fromSlots.find(
+        (s) => s.slot_date === fromDate && s.slot_kind === kind
+      )
+      await setSlot(supabase, scope, {
+        date: toDate,
+        kind,
+        mealId: fromSlot?.meal ? fromSlot.meal.id : null,
+      })
+    }
   }
 }

@@ -4,19 +4,38 @@ import {
   deleteMeal as deleteMealDomain,
   getMeal as getMealDomain,
   listMeals as listMealsDomain,
+  listPersonalMeals as listPersonalMealsDomain,
   upsertMeal as upsertMealDomain,
+  copyMeal as copyMealDomain,
+  type MealScope,
   type MealWithIngredients,
 } from "@/lib/domain/meals"
-import { requireUser, revalidateApp } from "@/lib/actions/session"
+import { requireScopedContext, revalidateApp } from "@/lib/actions/session"
+import { getCurrentIdentity } from "@/lib/accounts/identity"
+
+function toMealScope(
+  scope: { type: "personal" | "family"; familyId: string | null },
+  authUid: string
+): MealScope {
+  if (scope.type === "family" && scope.familyId) {
+    return { type: "family", familyId: scope.familyId, userId: authUid }
+  }
+  return { type: "personal", userId: authUid }
+}
 
 export async function listMeals(): Promise<MealWithIngredients[]> {
-  const { supabase, userId } = await requireUser()
-  return listMealsDomain(supabase, userId)
+  const { supabase, authUid, scope } = await requireScopedContext()
+  return listMealsDomain(supabase, toMealScope(scope, authUid))
+}
+
+export async function listPersonalMeals(): Promise<MealWithIngredients[]> {
+  const { supabase, authUid } = await requireScopedContext()
+  return listPersonalMealsDomain(supabase, authUid)
 }
 
 export async function getMeal(id: string): Promise<MealWithIngredients | null> {
-  const { supabase, userId } = await requireUser()
-  return getMealDomain(supabase, userId, id)
+  const { supabase, authUid, scope } = await requireScopedContext()
+  return getMealDomain(supabase, toMealScope(scope, authUid), id)
 }
 
 export async function upsertMeal(input: {
@@ -24,8 +43,8 @@ export async function upsertMeal(input: {
   name: string
   ingredientNames: string[]
 }): Promise<MealWithIngredients> {
-  const { supabase, userId } = await requireUser()
-  const meal = await upsertMealDomain(supabase, userId, {
+  const { supabase, authUid, scope } = await requireScopedContext()
+  const meal = await upsertMealDomain(supabase, toMealScope(scope, authUid), {
     ...input,
     origin: "user",
   })
@@ -34,7 +53,61 @@ export async function upsertMeal(input: {
 }
 
 export async function deleteMeal(id: string): Promise<void> {
-  const { supabase, userId } = await requireUser()
-  await deleteMealDomain(supabase, userId, id)
+  const { supabase, authUid, scope } = await requireScopedContext()
+  await deleteMealDomain(supabase, toMealScope(scope, authUid), id)
   revalidateApp()
+}
+
+export async function copyMealAction(input: {
+  mealId: string
+  target: "family" | "personal"
+}): Promise<MealWithIngredients> {
+  const { supabase, authUid, scope } = await requireScopedContext()
+  if (input.target === "family" && (!scope.familyId || scope.type !== "family")) {
+    throw new Error("Aucun groupe familial actif")
+  }
+
+  const identity = await getCurrentIdentity()
+  const authorName = identity?.name || identity?.email || "Membre"
+
+  const targetScope: MealScope =
+    input.target === "family"
+      ? { type: "family", familyId: scope.familyId!, userId: authUid, authorName }
+      : { type: "personal", userId: authUid }
+
+  const meal = await copyMealDomain(
+    supabase,
+    input.mealId,
+    targetScope,
+    authorName
+  )
+  revalidateApp()
+  return meal
+}
+
+export async function importPersonalMealsAction(input: {
+  mealIds: string[]
+}): Promise<MealWithIngredients[]> {
+  const { supabase, authUid, scope } = await requireScopedContext()
+  if (!scope.familyId) {
+    throw new Error("Aucun groupe familial actif")
+  }
+
+  const identity = await getCurrentIdentity()
+  const authorName = identity?.name || identity?.email || "Membre"
+  const targetScope: MealScope = {
+    type: "family",
+    familyId: scope.familyId,
+    userId: authUid,
+    authorName,
+  }
+
+  const imported: MealWithIngredients[] = []
+  for (const mealId of input.mealIds) {
+    const meal = await copyMealDomain(supabase, mealId, targetScope, authorName)
+    imported.push(meal)
+  }
+
+  revalidateApp()
+  return imported
 }

@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react"
 import Link from "next/link"
-import { ArrowLeft, Check } from "lucide-react"
+import { ArrowLeft, Check, User, Users } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -34,6 +34,8 @@ export function MealPicker({
   kind,
   currentMeal,
   meals,
+  personalMeals = [],
+  isFamilyMode = false,
   onAssign,
 }: {
   open: boolean
@@ -42,9 +44,15 @@ export function MealPicker({
   kind: SlotKind
   currentMeal: { id: string; name: string } | null
   meals: MealWithIngredients[]
-  onAssign: (meal: { id: string; name: string } | null) => void
+  personalMeals?: MealWithIngredients[]
+  isFamilyMode?: boolean
+  onAssign: (
+    meal: { id: string; name: string } | null,
+    isPersonal?: boolean
+  ) => void
 }) {
   const isDesktop = useMediaQuery("(min-width: 768px)")
+  const [tab, setTab] = useState<"family" | "personal">("family")
   const [query, setQuery] = useState("")
   const [creating, setCreating] = useState(false)
   const [pickingId, setPickingId] = useState<string | null>(null)
@@ -54,6 +62,9 @@ export function MealPicker({
   const title = creating
     ? `Nouvelle idée · ${SLOT_LABEL[kind]}`
     : `${SLOT_LABEL[kind]} · ${dateLabel}`
+
+  const activeMealList = isFamilyMode && tab === "personal" ? personalMeals : meals
+
   const knownIngredients = useMemo(() => {
     const map = new Map<string, { id: string; name: string }>()
     for (const meal of meals) {
@@ -66,22 +77,26 @@ export function MealPicker({
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return meals
-    return meals.filter((meal) => {
+    if (!q) return activeMealList
+    return activeMealList.filter((meal) => {
       if (meal.name.toLowerCase().includes(q)) return true
       return meal.ingredients.some((ingredient) =>
         ingredient.name.toLowerCase().includes(q)
       )
     })
-  }, [meals, query])
+  }, [activeMealList, query])
 
   function reset() {
+    setTab("family")
     setCreating(false)
     setQuery("")
     setPickingId(null)
   }
 
-  function assign(meal: { id: string; name: string } | null) {
+  function assign(
+    meal: { id: string; name: string } | null,
+    fromPersonal = false
+  ) {
     if (pickingId) return
     tapFeedback()
     setPickingId(meal?.id ?? "empty")
@@ -89,7 +104,7 @@ export function MealPicker({
     if (closeTimer.current) window.clearTimeout(closeTimer.current)
     closeTimer.current = window.setTimeout(
       () => {
-        onAssign(meal)
+        onAssign(meal, fromPersonal)
         onOpenChange(false)
         reset()
       },
@@ -97,23 +112,59 @@ export function MealPicker({
     )
   }
 
+  const isFromPersonalTab = isFamilyMode && tab === "personal"
+
   const body = creating ? (
     <MealForm
       initialName={query.trim() || undefined}
       knownIngredients={knownIngredients}
       submitLabel="Ajouter au créneau"
       onCancel={() => setCreating(false)}
-      onSaved={(saved) => assign({ id: saved.id, name: saved.name })}
+      onSaved={(saved) => assign({ id: saved.id, name: saved.name }, false)}
     />
   ) : (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
+      {isFamilyMode ? (
+        <div className="grid grid-cols-2 rounded-xl bg-muted/60 p-1 text-xs font-medium">
+          <button
+            type="button"
+            className={cn(
+              "flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 transition-all",
+              tab === "family"
+                ? "bg-card text-ink shadow-xs font-semibold"
+                : "text-muted-foreground hover:text-ink"
+            )}
+            onClick={() => setTab("family")}
+          >
+            <Users className="size-3.5" />
+            <span>Plats de la famille</span>
+          </button>
+          <button
+            type="button"
+            className={cn(
+              "flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 transition-all",
+              tab === "personal"
+                ? "bg-card text-ink shadow-xs font-semibold"
+                : "text-muted-foreground hover:text-ink"
+            )}
+            onClick={() => setTab("personal")}
+          >
+            <User className="size-3.5" />
+            <span>Mes recettes perso</span>
+          </button>
+        </div>
+      ) : null}
+
       <Input
         value={query}
         onChange={(event) => setQuery(event.target.value)}
-        placeholder="Rechercher un plat"
+        placeholder={
+          isFromPersonalTab ? "Rechercher parmi mes plats perso" : "Rechercher un plat"
+        }
         aria-label="Rechercher un plat"
         data-vaul-no-drag
       />
+
       <ScrollArea className="h-64" data-vaul-no-drag>
         {filtered.length === 0 ? (
           query.trim() ? (
@@ -121,22 +172,26 @@ export function MealPicker({
               <p className="text-sm text-muted-foreground">
                 Aucun plat ne correspond à «&nbsp;{query.trim()}&nbsp;»
               </p>
-              <Button
-                asChild
-                variant="outline"
-                size="sm"
-              >
-                <Link
-                  href={`/idees/nouvelle?nom=${encodeURIComponent(query.trim())}&date=${date}&kind=${kind}`}
-                  onClick={() => onOpenChange(false)}
+              {!isFromPersonalTab ? (
+                <Button
+                  asChild
+                  variant="outline"
+                  size="sm"
                 >
-                  Créer le plat «&nbsp;{query.trim()}&nbsp;»
-                </Link>
-              </Button>
+                  <Link
+                    href={`/idees/nouvelle?nom=${encodeURIComponent(query.trim())}&date=${date}&kind=${kind}`}
+                    onClick={() => onOpenChange(false)}
+                  >
+                    Créer le plat «&nbsp;{query.trim()}&nbsp;»
+                  </Link>
+                </Button>
+              ) : null}
             </div>
           ) : (
             <p className="px-1 py-4 text-sm text-muted-foreground">
-              Aucun plat dans le carnet.
+              {isFromPersonalTab
+                ? "Aucun plat personnel dans votre carnet."
+                : "Aucun plat dans le carnet de la famille."}
             </p>
           )
         ) : (
@@ -144,7 +199,7 @@ export function MealPicker({
             {filtered.map((meal) => {
               const chosen =
                 pickingId === meal.id ||
-                (!pickingId && currentMeal?.id === meal.id)
+                (!pickingId && !isFromPersonalTab && currentMeal?.id === meal.id)
               return (
                 <li key={meal.id}>
                   <button
@@ -153,12 +208,14 @@ export function MealPicker({
                       "tap-press flex min-h-12 w-full items-center justify-between gap-3 rounded-[0.75rem] px-3 text-left",
                       chosen ? "bg-muted" : "hover:bg-muted"
                     )}
-                    onClick={() => assign({ id: meal.id, name: meal.name })}
+                    onClick={() => assign({ id: meal.id, name: meal.name }, isFromPersonalTab)}
                   >
                     <span className="flex min-w-0 flex-col">
                       <span className="font-fraunces text-base">{meal.name}</span>
-                      <span className="text-sm text-muted-foreground">
+                      <span className="text-xs text-muted-foreground">
                         {ingredientCountLabel(meal.ingredients.length)}
+                        {meal.createdByName ? ` · Par ${meal.createdByName}` : ""}
+                        {isFromPersonalTab ? " · Cliquez pour importer & planifier" : ""}
                       </span>
                     </span>
                     {chosen ? (
@@ -193,7 +250,7 @@ export function MealPicker({
           type="button"
           variant="ghost"
           className="min-h-12"
-          onClick={() => assign(null)}
+          onClick={() => assign(null, false)}
         >
           {pickingId === "empty" ? "Retiré" : "Retirer"}
         </Button>

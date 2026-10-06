@@ -11,7 +11,14 @@ export type MealWithIngredients = {
   name: string
   origin: MealOrigin
   ingredients: { id: string; name: string }[]
+  familyId?: string | null
+  createdByUserId?: string | null
+  createdByName?: string | null
 }
+
+export type MealScope =
+  | { type: "personal"; userId: string }
+  | { type: "family"; familyId: string; userId: string; authorName?: string }
 
 export function knownFromMeals(meals: MealWithIngredients[]) {
   const map = new Map<string, { id: string; name: string }>()
@@ -33,25 +40,43 @@ function asOne<T>(value: T | T[] | null | undefined): T | null {
   return Array.isArray(value) ? (value[0] ?? null) : value
 }
 
-function mapMeal(row: {
-  id: string
-  name: string
-  origin: string
-  meal_ingredients?: MealIngredientRow[] | null
-}): MealWithIngredients {
+function mapMeal(
+  row: {
+    id: string
+    name: string
+    origin: string
+    family_id?: string | null
+    created_by_user_id?: string | null
+    meal_ingredients?: MealIngredientRow[] | null
+  },
+  memberNamesById?: Map<string, string>
+): MealWithIngredients {
   const origin: MealOrigin = row.origin === "ai" ? "ai" : "user"
   const ingredients = (row.meal_ingredients ?? [])
     .slice()
     .sort((a, b) => a.position - b.position)
     .map((item) => asOne(item.ingredient))
     .filter((item): item is { id: string; name: string } => Boolean(item))
-  return { id: row.id, name: row.name, origin, ingredients }
+
+  return {
+    id: row.id,
+    name: row.name,
+    origin,
+    ingredients,
+    familyId: row.family_id ?? null,
+    createdByUserId: row.created_by_user_id ?? null,
+    createdByName: row.created_by_user_id
+      ? memberNamesById?.get(row.created_by_user_id) ?? null
+      : null,
+  }
 }
 
 const MEAL_SELECT = `
   id,
   name,
   origin,
+  family_id,
+  created_by_user_id,
   meal_ingredients (
     position,
     ingredient:ingredients (
@@ -61,7 +86,77 @@ const MEAL_SELECT = `
   )
 `
 
+export function resolveMealCopyName(
+  originalName: string,
+  authorName: string,
+  existingNames: string[],
+  target: "family" | "personal"
+): string {
+  const cleanOriginal = originalName.trim()
+  const exists = (candidate: string) => {
+    const norm = candidate.trim().toLowerCase()
+    return existingNames.some((e) => e.trim().toLowerCase() === norm)
+  }
+
+  if (!exists(cleanOriginal)) {
+    return cleanOriginal
+  }
+
+  if (target === "family") {
+    const author = authorName.trim() || "Membre"
+    const firstCandidate = `${cleanOriginal} (de ${author})`
+    if (!exists(firstCandidate)) {
+      return firstCandidate
+    }
+    let count = 2
+    while (true) {
+      const candidate = `${cleanOriginal} (de ${author} ${count})`
+      if (!exists(candidate)) {
+        return candidate
+      }
+      count += 1
+    }
+  }
+
+  let count = 2
+  while (true) {
+    const candidate = `${cleanOriginal} (${count})`
+    if (!exists(candidate)) {
+      return candidate
+    }
+    count += 1
+  }
+}
+
 export async function listMeals(
+  supabase: Client,
+  scope: MealScope
+): Promise<MealWithIngredients[]> {
+  let query = supabase.from("meals").select(MEAL_SELECT)
+
+  let memberNamesById: Map<string, string> | undefined
+  if (scope.type === "family") {
+    query = query.eq("family_id", scope.familyId)
+    const { data: members } = await supabase
+      .from("family_members")
+      .select("user_id, display_name")
+      .eq("family_id", scope.familyId)
+    memberNamesById = new Map<string, string>(
+      (members ?? []).map((m) => [m.user_id, m.display_name || "Membre"])
+    )
+  } else {
+    query = query.eq("user_id", scope.userId).is("family_id", null)
+  }
+
+  const { data, error } = await query
+  if (error) throw new Error(error.message)
+
+  return (data ?? [])
+    .map((row) => mapMeal(row, memberNamesById))
+    .sort((a, b) => a.name.localeCompare(b.name, "fr"))
+}
+
+export async function listPersonalMeals(
   supabase: Client,
   userId: string
 ): Promise<MealWithIngredients[]> {
@@ -69,28 +164,39 @@ export async function listMeals(
     .from("meals")
     .select(MEAL_SELECT)
     .eq("user_id", userId)
+    .is("family_id", null)
 
   if (error) throw new Error(error.message)
 
   return (data ?? [])
-    .map(mapMeal)
+    .map((row) => mapMeal(row))
     .sort((a, b) => a.name.localeCompare(b.name, "fr"))
 }
 
 export async function getMeal(
   supabase: Client,
-  userId: string,
+  scope: MealScope,
   id: string
 ): Promise<MealWithIngredients | null> {
-  const { data, error } = await supabase
-    .from("meals")
-    .select(MEAL_SELECT)
-    .eq("user_id", userId)
-    .eq("id", id)
-    .maybeSingle()
+  let query = supabase.from("meals").select(MEAL_SELECT).eq("id", id)
+  let memberNamesById: Map<string, string> | undefined
 
+  if (scope.type === "family") {
+    query = query.eq("family_id", scope.familyId)
+    const { data: members } = await supabase
+      .from("family_members")
+      .select("user_id, display_name")
+      .eq("family_id", scope.familyId)
+    memberNamesById = new Map<string, string>(
+      (members ?? []).map((m) => [m.user_id, m.display_name || "Membre"])
+    )
+  } else {
+    query = query.eq("user_id", scope.userId).is("family_id", null)
+  }
+
+  const { data, error } = await query.maybeSingle()
   if (error) throw new Error(error.message)
-  return data ? mapMeal(data) : null
+  return data ? mapMeal(data, memberNamesById) : null
 }
 
 function uniqueIngredientNames(names: string[]): string[] {
@@ -110,7 +216,7 @@ function uniqueIngredientNames(names: string[]): string[] {
 
 async function replaceMealIngredients(
   supabase: Client,
-  userId: string,
+  scope: MealScope,
   mealId: string,
   ingredientNames: string[]
 ) {
@@ -124,30 +230,56 @@ async function replaceMealIngredients(
 
   if (names.length === 0) return
 
-  const rows = names.map((name) => ({
-    user_id: userId,
-    name,
-    name_normalized: normalizeName(name),
-  }))
-
-  const { error: upsertError } = await supabase
-    .from("ingredients")
-    .upsert(rows, {
-      onConflict: "user_id,name_normalized",
-      ignoreDuplicates: true,
-    })
-  if (upsertError) throw new Error(upsertError.message)
-
+  const isFamily = scope.type === "family"
   const norms = names.map(normalizeName)
-  const { data: ingredients, error: fetchError } = await supabase
+
+  let fetchQuery = supabase
     .from("ingredients")
     .select("id, name_normalized")
-    .eq("user_id", userId)
     .in("name_normalized", norms)
+
+  if (isFamily) {
+    fetchQuery = fetchQuery.eq("family_id", scope.familyId)
+  } else {
+    fetchQuery = fetchQuery.eq("user_id", scope.userId).is("family_id", null)
+  }
+
+  const { data: existingIngs, error: fetchError } = await fetchQuery
   if (fetchError) throw new Error(fetchError.message)
 
+  const existingNorms = new Set((existingIngs ?? []).map((i) => i.name_normalized))
+  const missingNames = names.filter((n) => !existingNorms.has(normalizeName(n)))
+
+  if (missingNames.length > 0) {
+    const rowsToInsert = missingNames.map((name) => ({
+      user_id: scope.userId,
+      family_id: isFamily ? scope.familyId : null,
+      name,
+      name_normalized: normalizeName(name),
+    }))
+
+    const { error: insertError } = await supabase
+      .from("ingredients")
+      .insert(rowsToInsert)
+    if (insertError) throw new Error(insertError.message)
+  }
+
+  let refetchQuery = supabase
+    .from("ingredients")
+    .select("id, name_normalized")
+    .in("name_normalized", norms)
+
+  if (isFamily) {
+    refetchQuery = refetchQuery.eq("family_id", scope.familyId)
+  } else {
+    refetchQuery = refetchQuery.eq("user_id", scope.userId).is("family_id", null)
+  }
+
+  const { data: allIngs, error: allFetchError } = await refetchQuery
+  if (allFetchError) throw new Error(allFetchError.message)
+
   const byNorm = new Map(
-    (ingredients ?? []).map((row) => [row.name_normalized, row.id])
+    (allIngs ?? []).map((row) => [row.name_normalized, row.id])
   )
 
   const links = names.map((name, position) => {
@@ -170,7 +302,7 @@ async function replaceMealIngredients(
 
 export async function upsertMeal(
   supabase: Client,
-  userId: string,
+  scope: MealScope,
   input: {
     id?: string
     name: string
@@ -183,45 +315,87 @@ export async function upsertMeal(
   if (name.length > 80) throw new Error("NAME_REQUIRED")
 
   let mealId = input.id
+  const isFamily = scope.type === "family"
 
   if (mealId) {
-    const existing = await getMeal(supabase, userId, mealId)
+    const existing = await getMeal(supabase, scope, mealId)
     if (!existing) throw new Error("MEAL_NOT_FOUND")
-    const { error } = await supabase
-      .from("meals")
-      .update({ name })
-      .eq("id", mealId)
-      .eq("user_id", userId)
+
+    let updateQuery = supabase.from("meals").update({ name }).eq("id", mealId)
+    if (isFamily) {
+      updateQuery = updateQuery.eq("family_id", scope.familyId)
+    } else {
+      updateQuery = updateQuery.eq("user_id", scope.userId).is("family_id", null)
+    }
+    const { error } = await updateQuery
     if (error) throw new Error(error.message)
   } else {
+    const insertPayload = {
+      user_id: scope.userId,
+      family_id: isFamily ? scope.familyId : null,
+      created_by_user_id: isFamily ? scope.userId : null,
+      name,
+      origin: input.origin ?? "user",
+    }
     const { data, error } = await supabase
       .from("meals")
-      .insert({
-        user_id: userId,
-        name,
-        origin: input.origin ?? "user",
-      })
+      .insert(insertPayload)
       .select("id")
       .single()
     if (error || !data) throw new Error(error?.message ?? "SAVE_FAILED")
     mealId = data.id
   }
 
-  await replaceMealIngredients(supabase, userId, mealId, input.ingredientNames)
-  const meal = await getMeal(supabase, userId, mealId)
+  await replaceMealIngredients(supabase, scope, mealId, input.ingredientNames)
+  const meal = await getMeal(supabase, scope, mealId)
   if (!meal) throw new Error("SAVE_FAILED")
   return meal
 }
 
 export async function deleteMeal(
   supabase: Client,
-  userId: string,
+  scope: MealScope,
   id: string
 ): Promise<void> {
-  const { error } = await supabase
-    .from("meals")
-    .delete()
-    .eq("id", id)
-    .eq("user_id", userId)
+  let query = supabase.from("meals").delete().eq("id", id)
+  if (scope.type === "family") {
+    query = query.eq("family_id", scope.familyId)
+  } else {
+    query = query.eq("user_id", scope.userId).is("family_id", null)
+  }
+  const { error } = await query
   if (error) throw new Error(error.message)
+}
+
+export async function copyMeal(
+  supabase: Client,
+  sourceMealId: string,
+  targetScope: MealScope,
+  authorName: string
+): Promise<MealWithIngredients> {
+  const { data: source, error: sourceError } = await supabase
+    .from("meals")
+    .select(MEAL_SELECT)
+    .eq("id", sourceMealId)
+    .maybeSingle()
+
+  if (sourceError || !source) throw new Error("MEAL_NOT_FOUND")
+  const sourceMeal = mapMeal(source)
+
+  const targetMeals = await listMeals(supabase, targetScope)
+  const existingNames = targetMeals.map((m) => m.name)
+
+  const newName = resolveMealCopyName(
+    sourceMeal.name,
+    authorName,
+    existingNames,
+    targetScope.type
+  )
+
+  const ingredientNames = sourceMeal.ingredients.map((i) => i.name)
+  return upsertMeal(supabase, targetScope, {
+    name: newName,
+    ingredientNames,
+    origin: sourceMeal.origin,
+  })
 }

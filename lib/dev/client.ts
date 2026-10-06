@@ -10,10 +10,10 @@ import {
 type Row = Record<string, unknown>
 type Filter =
   | { kind: "eq"; col: string; value: unknown }
+  | { kind: "is"; col: string; value: unknown }
   | { kind: "gte"; col: string; value: unknown }
   | { kind: "lte"; col: string; value: unknown }
   | { kind: "in"; col: string; value: unknown[] }
-
 function ok<T>(data: T) {
   return { data, error: null as { message: string } | null }
 }
@@ -25,7 +25,18 @@ function fail(message: string) {
 function matches(row: Row, filters: Filter[]) {
   return filters.every((filter) => {
     const current = row[filter.col]
-    if (filter.kind === "eq") return current === filter.value
+    if (filter.kind === "is") {
+      if (filter.value === null) {
+        return current === null || current === undefined
+      }
+      return current === filter.value
+    }
+    if (filter.kind === "eq") {
+      if (filter.value === null) {
+        return current === null || current === undefined
+      }
+      return current === filter.value
+    }
     if (filter.kind === "gte") return String(current) >= String(filter.value)
     if (filter.kind === "lte") return String(current) <= String(filter.value)
     return filter.value.includes(current)
@@ -139,6 +150,15 @@ class Query {
     this.filters.push({ kind: "eq", col, value })
     return this
   }
+  is(col: string, value: unknown) {
+    this.filters.push({ kind: "is", col, value })
+    return this
+  }
+
+  order() {
+    return this
+  }
+
 
   gte(col: string, value: unknown) {
     this.filters.push({ kind: "gte", col, value })

@@ -2,12 +2,15 @@
 
 import { useOptimistic, useState, useTransition } from "react"
 import { toast } from "sonner"
+import { Sparkles } from "lucide-react"
 import { MealPicker } from "@/components/meal-picker"
+import { MagicPlanDialog } from "@/components/magic-plan-dialog"
+import { Button } from "@/components/ui/button"
 import { DownloadPdfButton } from "@/components/download-pdf-button"
 import { SlotCard } from "@/components/slot-card"
 import { WeekSwitcher } from "@/components/week-switcher"
 import { PageHeader } from "@/components/page-header"
-import { setSlot } from "@/lib/actions/slots"
+import { setSlot, assignPersonalMealToSlot } from "@/lib/actions/slots"
 import { actionErrorMessage } from "@/lib/errors"
 import {
   isPastDay,
@@ -49,10 +52,14 @@ export function WeekBoard({
   weekStart,
   weeks,
   meals,
+  personalMeals = [],
+  isFamilyMode = false,
 }: {
   weekStart: string
   weeks: WeekBlock[]
   meals: MealWithIngredients[]
+  personalMeals?: MealWithIngredients[]
+  isFamilyMode?: boolean
 }) {
   const visibleWeeks = weeks.filter((week) => parseISODate(week.start))
   const [slots, setSlotsOptimistic] = useOptimistic(
@@ -74,7 +81,7 @@ export function WeekBoard({
   const [, startTransition] = useTransition()
   const [picker, setPicker] = useState<PickerTarget | null>(null)
   const [flash, setFlash] = useState<string | null>(null)
-
+  const [magicPlanOpen, setMagicPlanOpen] = useState(false)
   function slotFor(date: string, kind: SlotKind) {
     return (
       slots.find((slot) => slot.slot_date === date && slot.slot_kind === kind) ??
@@ -89,7 +96,22 @@ export function WeekBoard({
     <>
       <PageHeader
         title="Semaine"
-        actions={<DownloadPdfButton weekStart={weekStart} />}
+        actions={
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="min-h-10 gap-1.5 text-xs font-medium text-primary hover:text-primary"
+              onClick={() => setMagicPlanOpen(true)}
+            >
+              <Sparkles className="size-3.5 text-primary" />
+              <span className="hidden sm:inline">Remplir avec l&apos;IA</span>
+              <span className="sm:hidden">Magic Fill</span>
+            </Button>
+            <DownloadPdfButton weekStart={weekStart} />
+          </div>
+        }
       />
       <div className="hidden px-8 pb-4 md:block">
         <WeekSwitcher weekStart={weekStart} hrefFor={hrefForWeek} />
@@ -145,9 +167,45 @@ export function WeekBoard({
           kind={picker.kind}
           currentMeal={pickerSlot.meal}
           meals={meals}
-          onAssign={(meal) => {
+          personalMeals={personalMeals}
+          isFamilyMode={isFamilyMode}
+          onAssign={(meal, fromPersonal) => {
             const key = slotKey(picker.date, picker.kind)
             const kindLabel = SLOT_LABEL[picker.kind].toLowerCase()
+
+            if (fromPersonal && meal) {
+              startTransition(async () => {
+                setSlotsOptimistic({
+                  date: picker.date,
+                  kind: picker.kind,
+                  meal,
+                })
+                setFlash(key)
+                window.setTimeout(() => {
+                  setFlash((current) => (current === key ? null : current))
+                }, 700)
+                toast.success("Plat ajouté au planning et partagé avec la famille")
+                try {
+                  const result = await assignPersonalMealToSlot({
+                    date: picker.date,
+                    kind: picker.kind,
+                    mealId: meal.id,
+                  })
+                  if (result.meal?.name) {
+                    setSlotsOptimistic({
+                      date: picker.date,
+                      kind: picker.kind,
+                      meal: { id: result.meal.id, name: result.meal.name },
+                    })
+                  }
+                } catch (error) {
+                  toast.error(actionErrorMessage(error))
+                  throw error
+                }
+              })
+              return
+            }
+
             startTransition(async () => {
               setSlotsOptimistic({
                 date: picker.date,
@@ -175,6 +233,23 @@ export function WeekBoard({
           }}
         />
       ) : null}
+      <MagicPlanDialog
+        open={magicPlanOpen}
+        onOpenChange={setMagicPlanOpen}
+        slots={slots}
+        meals={meals}
+        onApplied={(applied) => {
+          startTransition(() => {
+            for (const item of applied) {
+              setSlotsOptimistic({
+                date: item.date,
+                kind: item.kind,
+                meal: item.meal,
+              })
+            }
+          })
+        }}
+      />
     </>
   )
 }

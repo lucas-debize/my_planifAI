@@ -8,6 +8,9 @@ import {
   ShoppingBasket,
   UserRound,
 } from "lucide-react"
+import { WorkspaceSwitcher } from "@/components/workspace-switcher"
+import { WorkspaceProvider } from "@/components/workspace-context"
+import type { PlanningScope } from "@/lib/domain/session"
 import { cn } from "@/lib/utils"
 
 const NAV = [
@@ -22,18 +25,28 @@ function isActive(pathname: string, href: string) {
   return pathname === href
 }
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({
+  children,
+  scope,
+}: {
+  children: React.ReactNode
+  scope: PlanningScope
+}) {
   const pathname = usePathname()
 
   return (
-    <div className="min-h-dvh bg-bg md:flex">
-      <aside className="hidden md:flex md:w-60 md:shrink-0 md:flex-col md:border-r md:border-line md:bg-surface">
-        <div className="px-5 py-6">
-          <Link href="/semaine" className="font-fraunces text-2xl text-ink">
-            MyPlanifAI
-          </Link>
-        </div>
-        <nav className="flex flex-1 flex-col gap-1 px-3" aria-label="Principal">
+    <WorkspaceProvider scope={scope}>
+      <div className="min-h-dvh bg-bg md:flex">
+        <aside className="hidden md:flex md:w-60 md:shrink-0 md:flex-col md:border-r md:border-line md:bg-surface">
+          <div className="px-5 pt-6 pb-4">
+            <Link href="/semaine" className="font-fraunces text-2xl text-ink">
+              MyPlanifAI
+            </Link>
+          </div>
+          <div className="px-3 pb-3">
+            <WorkspaceSwitcher />
+          </div>
+          <nav className="flex flex-1 flex-col gap-1 px-3" aria-label="Principal">
           {NAV.map((item) => {
             const Icon = item.icon
             const active = isActive(pathname, item.href)
@@ -101,5 +114,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </nav>
       </div>
     </div>
-  )
+  </WorkspaceProvider>
+)
 }
