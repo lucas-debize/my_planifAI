@@ -15,6 +15,7 @@ export default async function NouvelleIdeePage(props: {
       date={date}
       kind={kind}
       knownIngredients={knownFromMeals(meals)}
+      existingMeals={meals}
     />
   )
 }

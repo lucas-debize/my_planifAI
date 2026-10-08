@@ -111,6 +111,40 @@ export function MealPicker({
     return list
   }, [weekSlots])
 
+  // Plat cuisiné immédiatement avant ce créneau (la veille ou le midi même)
+  const previousMealInfo = useMemo(() => {
+    if (!date || !kind || weekSlots.length === 0) return null
+
+    const isTargetDiner = kind === "diner"
+    const priorSlots = weekSlots.filter((s) => {
+      if (s.slot_date < date) return true
+      if (s.slot_date === date && isTargetDiner && s.slot_kind === "dejeuner") {
+        return true
+      }
+      return false
+    })
+
+    priorSlots.sort((a, b) => {
+      if (a.slot_date !== b.slot_date) return b.slot_date.localeCompare(a.slot_date)
+      if (a.slot_kind === "diner" && b.slot_kind === "dejeuner") return -1
+      if (a.slot_kind === "dejeuner" && b.slot_kind === "diner") return 1
+      return 0
+    })
+
+    const found = priorSlots.find((s) => Boolean(s.meal?.name))
+    if (!found || !found.meal) return null
+
+    const cleanName = found.meal.name.replace(/^reste\s*:\s*/i, "").trim()
+    const isSameDayLunch = found.slot_date === date && found.slot_kind === "dejeuner"
+    return {
+      cleanName,
+      label: isSameDayLunch
+        ? `Reste de ce midi : ${cleanName}`
+        : `Reste de la veille : ${cleanName}`,
+      resteTitle: `Reste : ${cleanName}`,
+    }
+  }, [date, kind, weekSlots])
+
   const knownIngredients = useMemo(() => {
     const map = new Map<string, { id: string; name: string }>()
     for (const meal of meals) {
@@ -163,6 +197,7 @@ export function MealPicker({
     <MealForm
       initialName={query.trim() || undefined}
       knownIngredients={knownIngredients}
+      existingMeals={activeMealList}
       submitLabel="Ajouter au créneau"
       onCancel={() => setCreating(false)}
       onSaved={(saved) => assign({ id: saved.id, name: saved.name }, "normal")}
@@ -235,20 +270,48 @@ export function MealPicker({
     </div>
   ) : (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      {/* Bouton d'action rapide Reste */}
-      <button
-        type="button"
-        onClick={() => setPickingReste(true)}
-        className="tap-press flex w-full items-center justify-between rounded-xl border border-dashed border-amber-500/40 bg-amber-500/10 px-3 py-2 text-left text-xs font-medium text-amber-900 transition-colors hover:bg-amber-500/15 dark:text-amber-200"
-      >
-        <span className="flex items-center gap-2">
-          <span className="text-base">🍲</span>
-          <span className="font-semibold">Poser un reste</span>
-        </span>
-        <span className="text-[11px] font-normal text-amber-700 dark:text-amber-300">
-          0 ingrédient ajouté aux courses
-        </span>
-      </button>
+      {/* Mise en avant du Reste par défaut (la veille) — 1 clic pour poser */}
+      <div className="flex flex-col gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-950 dark:text-amber-200">
+        <div className="flex items-center justify-between">
+          <span className="flex items-center gap-1.5 font-semibold">
+            <span>🍲</span>
+            <span>{previousMealInfo ? previousMealInfo.label : "Reste de la veille"}</span>
+          </span>
+          <span className="text-[10px] text-amber-800/80 dark:text-amber-300/80">
+            0 ingrédient aux courses
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            size="sm"
+            className="tap-press h-8 flex-1 bg-amber-600 text-xs font-semibold text-white shadow-xs hover:bg-amber-700 dark:bg-amber-500 dark:text-zinc-950 dark:hover:bg-amber-400"
+            onClick={() =>
+              assign(
+                {
+                  id: "reste",
+                  name: previousMealInfo ? previousMealInfo.resteTitle : "Reste de repas",
+                },
+                "reste"
+              )
+            }
+          >
+            Poser ce reste
+          </Button>
+          {previousMeals.length > 0 ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="tap-press h-8 border-amber-500/40 text-xs text-amber-900 hover:bg-amber-500/20 dark:text-amber-200"
+              onClick={() => setPickingReste(true)}
+            >
+              Autre reste…
+            </Button>
+          ) : null}
+        </div>
+      </div>
+
 
       {/* Onglets selon le contexte (famille ou perso avec groupe) */}
       {hasFamilyGroup ? (

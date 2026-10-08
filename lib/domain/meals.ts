@@ -182,7 +182,7 @@ export async function listMeals(
   }
 
   let { data, error } = await query
-  if (error && /column.*quantity/i.test(error.message)) {
+  if (error && /quantity/i.test(error.message)) {
     let legacyQuery = supabase.from("meals").select(MEAL_SELECT_LEGACY)
     if (scope.type === "family") {
       legacyQuery = legacyQuery.eq("family_id", scope.familyId)
@@ -210,7 +210,7 @@ export async function listPersonalMeals(
     .eq("user_id", userId)
     .is("family_id", null)
 
-  if (error && /column.*quantity/i.test(error.message)) {
+  if (error && /quantity/i.test(error.message)) {
     const res = await supabase
       .from("meals")
       .select(MEAL_SELECT_LEGACY)
@@ -249,7 +249,7 @@ export async function getMeal(
   }
 
   let { data, error } = await query.maybeSingle()
-  if (error && /column.*quantity/i.test(error.message)) {
+  if (error && /quantity/i.test(error.message)) {
     let legacyQuery = supabase.from("meals").select(MEAL_SELECT_LEGACY).eq("id", id)
     if (scope.type === "family") {
       legacyQuery = legacyQuery.eq("family_id", scope.familyId)
@@ -344,7 +344,9 @@ async function replaceMealIngredients(
     const { error: insertError } = await supabase
       .from("ingredients")
       .insert(rowsToInsert)
-    if (insertError) throw new Error(insertError.message)
+    if (insertError && !insertError.message.toLowerCase().includes("unique")) {
+      throw new Error(insertError.message)
+    }
   }
 
   let refetchQuery = supabase
@@ -364,24 +366,35 @@ async function replaceMealIngredients(
   const byNorm = new Map(
     (allIngs ?? []).map((row) => [row.name_normalized, row.id])
   )
+  if (byNorm.size < norms.length) {
+    const { data: fallbackIngs } = await supabase
+      .from("ingredients")
+      .select("id, name_normalized")
+      .in("name_normalized", norms)
+    for (const row of fallbackIngs ?? []) {
+      if (!byNorm.has(row.name_normalized)) {
+        byNorm.set(row.name_normalized, row.id)
+      }
+    }
+  }
 
-  const links = items.map((item, position) => {
-    const ingredientId = byNorm.get(normalizeName(item.name))
-    if (!ingredientId) {
-      throw new Error("INGREDIENT_MISSING")
-    }
-    return {
-      meal_id: mealId,
-      ingredient_id: ingredientId,
-      position,
-      quantity: item.quantity,
-    }
-  })
+  const links = items
+    .map((item, position) => {
+      const ingredientId = byNorm.get(normalizeName(item.name))
+      if (!ingredientId) return null
+      return {
+        meal_id: mealId,
+        ingredient_id: ingredientId,
+        position,
+        quantity: item.quantity,
+      }
+    })
+    .filter((link): link is NonNullable<typeof link> => Boolean(link))
 
   let { error: linkError } = await supabase
     .from("meal_ingredients")
     .insert(links)
-  if (linkError && /column.*quantity/i.test(linkError.message)) {
+  if (linkError && /quantity/i.test(linkError.message)) {
     const fallbackLinks = links.map(({ quantity: _qty, ...rest }) => {
       void _qty
       return rest

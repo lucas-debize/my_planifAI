@@ -13,11 +13,13 @@ export function NewMealPage({
   date,
   kind,
   knownIngredients,
+  existingMeals,
 }: {
   initialName?: string
   date?: string
   kind?: string
   knownIngredients: { id: string; name: string }[]
+  existingMeals?: MealWithIngredients[]
 }) {
   const router = useRouter()
   const isSlot = Boolean(date && (kind === "lunch" || kind === "dinner"))
@@ -29,6 +31,7 @@ export function NewMealPage({
     : "Nouvelle idée"
 
   async function onSaved(saved: MealWithIngredients) {
+    router.refresh()
     if (isSlot && date && slotKind) {
       try {
         await setSlot({
@@ -57,6 +60,7 @@ export function NewMealPage({
         <MealForm
           initialName={initialName}
           knownIngredients={knownIngredients}
+          existingMeals={existingMeals}
           submitLabel={isSlot ? "Ajouter au créneau" : "Enregistrer"}
           onCancel={() => router.push(isSlot ? "/semaine" : "/idees")}
           onSaved={onSaved}

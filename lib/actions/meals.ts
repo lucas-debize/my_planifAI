@@ -124,3 +124,24 @@ export async function importPersonalMealsAction(input: {
   revalidateApp()
   return imported
 }
+
+export async function importFamilyMealsAction(input: {
+  mealIds: string[]
+}): Promise<MealWithIngredients[]> {
+  const { supabase, authUid } = await requireScopedContext()
+  const identity = await getCurrentIdentity()
+  const authorName = identity?.name || identity?.email || "Personnel"
+  const targetScope: MealScope = {
+    type: "personal",
+    userId: authUid,
+  }
+
+  const imported: MealWithIngredients[] = []
+  for (const mealId of input.mealIds) {
+    const meal = await copyMealDomain(supabase, mealId, targetScope, authorName)
+    imported.push(meal)
+  }
+
+  revalidateApp()
+  return imported
+}

@@ -55,7 +55,10 @@ export function EditMealPage({
           knownIngredients={knownIngredients}
           submitLabel="Modifier le plat"
           onCancel={() => router.push("/idees")}
-          onSaved={() => router.push("/idees")}
+          onSaved={() => {
+            router.refresh()
+            router.push("/idees")
+          }}
         />
       </div>
       <AlertDialog open={open} onOpenChange={setOpen}>

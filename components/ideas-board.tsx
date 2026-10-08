@@ -19,18 +19,20 @@ import {
 } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { ingredientCountLabel } from "@/components/meal-picker"
-import { importPersonalMealsAction } from "@/lib/actions/meals"
+import { importPersonalMealsAction, importFamilyMealsAction } from "@/lib/actions/meals"
 import { actionErrorMessage } from "@/lib/errors"
 import type { MealWithIngredients } from "@/lib/domain/meals"
 
 export function IdeasBoard({
   meals,
   personalMeals = [],
+  familyMeals = [],
   isFamilyMode = false,
   scopeDisplayName,
 }: {
   meals: MealWithIngredients[]
   personalMeals?: MealWithIngredients[]
+  familyMeals?: MealWithIngredients[]
   isFamilyMode?: boolean
   scopeDisplayName?: string
 }) {
@@ -51,6 +53,8 @@ export function IdeasBoard({
     })
   }, [meals, query])
 
+  const importableMeals = isFamilyMode ? personalMeals : familyMeals
+
   function toggleMeal(id: string) {
     setSelectedMealIds((prev) => {
       const next = new Set(prev)
@@ -61,10 +65,10 @@ export function IdeasBoard({
   }
 
   function toggleAll() {
-    if (selectedMealIds.size === personalMeals.length) {
+    if (selectedMealIds.size === importableMeals.length) {
       setSelectedMealIds(new Set())
     } else {
-      setSelectedMealIds(new Set(personalMeals.map((m) => m.id)))
+      setSelectedMealIds(new Set(importableMeals.map((m) => m.id)))
     }
   }
 
@@ -73,10 +77,17 @@ export function IdeasBoard({
     const ids = Array.from(selectedMealIds)
     startImportTransition(async () => {
       try {
-        await importPersonalMealsAction({ mealIds: ids })
-        toast.success(
-          `${ids.length} recette${ids.length > 1 ? "s" : ""} importée${ids.length > 1 ? "s" : ""} dans la famille`
-        )
+        if (isFamilyMode) {
+          await importPersonalMealsAction({ mealIds: ids })
+          toast.success(
+            `${ids.length} recette${ids.length > 1 ? "s" : ""} importée${ids.length > 1 ? "s" : ""} dans la famille`
+          )
+        } else {
+          await importFamilyMealsAction({ mealIds: ids })
+          toast.success(
+            `${ids.length} recette${ids.length > 1 ? "s" : ""} importée${ids.length > 1 ? "s" : ""} dans mes idées`
+          )
+        }
         setImportOpen(false)
         setSelectedMealIds(new Set())
       } catch (err) {
@@ -103,7 +114,22 @@ export function IdeasBoard({
               >
                 <Download className="size-4" />
                 <span className="hidden sm:inline">Importer mes recettes perso</span>
-                <span className="sm:hidden">Importer</span>
+                <span className="sm:hidden">Importer perso</span>
+              </Button>
+            ) : null}
+            {!isFamilyMode && familyMeals.length > 0 ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-12 gap-1.5"
+                onClick={() => {
+                  setSelectedMealIds(new Set(familyMeals.map((m) => m.id)))
+                  setImportOpen(true)
+                }}
+              >
+                <Download className="size-4" />
+                <span className="hidden sm:inline">Importer les recettes du groupe</span>
+                <span className="sm:hidden">Importer groupe</span>
               </Button>
             ) : null}
             <Button asChild className="min-h-12">
@@ -203,31 +229,34 @@ export function IdeasBoard({
         </ul>
       )}
 
-      {/* Dialogue d'import des recettes perso */}
-      {isFamilyMode ? (
+      {/* Dialogue d'import des recettes (perso <-> famille) */}
+      {importableMeals.length > 0 ? (
         <Dialog open={importOpen} onOpenChange={setImportOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle className="font-fraunces text-lg">
-                Importer mes recettes perso
+                {isFamilyMode
+                  ? "Importer mes recettes perso"
+                  : "Importer les recettes du groupe"}
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground">
-                Copiez vos recettes personnelles vers le catalogue de la famille. En cas
-                de doublon de nom, elles seront automatiquement renommées avec votre prénom.
+                {isFamilyMode
+                  ? "Copiez vos recettes personnelles vers le catalogue de la famille. En cas de doublon de nom, elles seront automatiquement renommées avec votre prénom."
+                  : "Copiez des recettes partagées de votre groupe vers votre carnet d'idées personnel."}
               </DialogDescription>
             </DialogHeader>
 
             <div className="flex items-center justify-between border-b pb-2 pt-1 text-xs">
               <span className="text-muted-foreground">
                 {selectedMealIds.size} sélectionnée{selectedMealIds.size > 1 ? "s" : ""} sur{" "}
-                {personalMeals.length}
+                {importableMeals.length}
               </span>
               <button
                 type="button"
                 onClick={toggleAll}
                 className="font-medium text-primary hover:underline"
               >
-                {selectedMealIds.size === personalMeals.length
+                {selectedMealIds.size === importableMeals.length
                   ? "Tout désélectionner"
                   : "Tout sélectionner"}
               </button>
@@ -235,7 +264,7 @@ export function IdeasBoard({
 
             <ScrollArea className="max-h-64 py-1">
               <div className="flex flex-col gap-2">
-                {personalMeals.map((meal) => {
+                {importableMeals.map((meal) => {
                   const checked = selectedMealIds.has(meal.id)
                   return (
                     <label

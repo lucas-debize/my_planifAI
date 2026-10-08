@@ -2,11 +2,12 @@
 
 import { useMemo, useState } from "react"
 import { toast } from "sonner"
-import { Check, Loader2, Pencil, X } from "lucide-react"
+import { AlertTriangle, Check, Loader2, Pencil, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { MagicRecipeDialog } from "@/components/magic-recipe-dialog"
+import { ingredientCountLabel } from "@/components/meal-picker"
 import { upsertMeal } from "@/lib/actions/meals"
 import { actionErrorMessage } from "@/lib/errors"
 import { displayName, normalizeName } from "@/lib/ingredients"
@@ -23,6 +24,7 @@ export function MealForm({
   initialName,
   knownIngredients,
   submitLabel = "Enregistrer",
+  existingMeals,
   onSaved,
   onCancel,
 }: {
@@ -30,6 +32,7 @@ export function MealForm({
   initialName?: string
   knownIngredients: { id: string; name: string }[]
   submitLabel?: string
+  existingMeals?: MealWithIngredients[]
   onSaved: (saved: MealWithIngredients) => void
   onCancel?: () => void
 }) {
@@ -48,6 +51,13 @@ export function MealForm({
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editName, setEditName] = useState("")
   const [editQty, setEditQty] = useState("")
+
+  const duplicateMeal = useMemo(() => {
+    if (meal) return null
+    const norm = normalizeName(name)
+    if (!norm) return null
+    return existingMeals?.find((m) => normalizeName(m.name) === norm) ?? null
+  }, [meal, name, existingMeals])
 
   const selectedNorms = useMemo(
     () => new Set(ingredients.map((i) => normalizeName(i.name))),
@@ -146,6 +156,65 @@ export function MealForm({
     }
   }
 
+  function prepareIngredients(): FormIngredientItem[] {
+    const list = [...ingredients]
+    if (editingIndex !== null && list[editingIndex]) {
+      const nextName = displayName(editName)
+      if (nextName) {
+        list[editingIndex] = {
+          name: nextName,
+          quantity: editQty.trim() || null,
+        }
+      }
+    }
+    if (draft.trim()) {
+      const parts = draft
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean)
+      const seen = new Set(list.map((i) => normalizeName(i.name)))
+      for (const part of parts) {
+        const item = parseInputToIngredient(part)
+        if (!item) continue
+        const norm = normalizeName(item.name)
+        if (!norm || seen.has(norm)) continue
+        seen.add(norm)
+        list.push(item)
+      }
+    }
+    return list
+  }
+
+  async function executeSave(targetMealId?: string) {
+    if (!name.trim()) {
+      toast.error("Donne un nom au plat.")
+      return
+    }
+
+    const submitIngredients = prepareIngredients()
+    setIngredients(submitIngredients)
+    setDraft("")
+    setOpen(false)
+    setEditingIndex(null)
+
+    setPending(true)
+    try {
+      const saved = await upsertMeal({
+        id: targetMealId ?? meal?.id,
+        name: name.trim(),
+        ingredientNames: submitIngredients,
+      })
+      toast.success(
+        targetMealId ? "Ancien plat écrasé et mis à jour" : "Plat enregistré"
+      )
+      onSaved(saved)
+    } catch (error) {
+      toast.error(actionErrorMessage(error))
+    } finally {
+      setPending(false)
+    }
+  }
+
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault()
     if (!name.trim()) {
@@ -153,40 +222,12 @@ export function MealForm({
       return
     }
 
-    const submitIngredients = [...ingredients]
-    if (draft.trim()) {
-      const parts = draft
-        .split(",")
-        .map((part) => part.trim())
-        .filter(Boolean)
-      const seen = new Set(submitIngredients.map((i) => normalizeName(i.name)))
-      for (const part of parts) {
-        const item = parseInputToIngredient(part)
-        if (!item) continue
-        const norm = normalizeName(item.name)
-        if (!norm || seen.has(norm)) continue
-        seen.add(norm)
-        submitIngredients.push(item)
-      }
-      setIngredients(submitIngredients)
-      setDraft("")
-      setOpen(false)
+    if (duplicateMeal) {
+      toast.error(`Le plat « ${duplicateMeal.name} » existe déjà dans tes idées.`)
+      return
     }
 
-    setPending(true)
-    try {
-      const saved = await upsertMeal({
-        id: meal?.id,
-        name: name.trim(),
-        ingredientNames: submitIngredients,
-      })
-      toast.success("Plat enregistré")
-      onSaved(saved)
-    } catch (error) {
-      toast.error(actionErrorMessage(error))
-    } finally {
-      setPending(false)
-    }
+    await executeSave()
   }
 
   return (
@@ -369,6 +410,32 @@ export function MealForm({
           </ul>
         ) : null}
       </div>
+
+      {duplicateMeal ? (
+        <div className="flex flex-col gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+            <div className="flex-1">
+              <p className="font-semibold">Ce plat existe déjà dans tes idées</p>
+              <p className="mt-0.5 text-amber-800/90 dark:text-amber-300/90">
+                Un plat nommé « {duplicateMeal.name} » existe déjà ({ingredientCountLabel(duplicateMeal.ingredients.length)}). Tu ne peux pas créer de doublon.
+              </p>
+            </div>
+          </div>
+          <div className="flex justify-end pt-1">
+            <Button
+              type="button"
+              size="sm"
+              variant="destructive"
+              className="h-8 text-xs font-semibold"
+              disabled={pending}
+              onClick={() => executeSave(duplicateMeal.id)}
+            >
+              Écraser l&apos;ancien plat
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
         {onCancel ? (

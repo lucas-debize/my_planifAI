@@ -205,4 +205,99 @@ describe("Domaine Planning, Repas & Gestion de Session", () => {
       expect(meal.ingredients[3].quantity).toBeNull()
     })
   })
+
+  describe("Sélection automatique du reste de la veille", () => {
+    type TestSlot = {
+      date: string
+      kind: "lunch" | "dinner"
+      meal: { id: string; name: string } | null
+    }
+
+    function findPreviousMeal(
+      date: string,
+      kind: "lunch" | "dinner",
+      slots: TestSlot[]
+    ) {
+      const isTargetDinner = kind === "dinner"
+      const priorSlots = slots.filter((s) => {
+        if (s.date < date) return true
+        if (s.date === date && isTargetDinner && s.kind === "lunch") return true
+        return false
+      })
+
+      priorSlots.sort((a, b) => {
+        if (a.date !== b.date) return b.date.localeCompare(a.date)
+        if (a.kind === "dinner" && b.kind === "lunch") return -1
+        if (a.kind === "lunch" && b.kind === "dinner") return 1
+        return 0
+      })
+
+      const found = priorSlots.find((s) => Boolean(s.meal?.name))
+      if (!found || !found.meal) return null
+
+      const cleanName = found.meal.name.replace(/^reste\s*:\s*/i, "").trim()
+      const isSameDayLunch = found.date === date && found.kind === "lunch"
+      return {
+        cleanName,
+        label: isSameDayLunch
+          ? `Reste de ce midi : ${cleanName}`
+          : `Reste de la veille : ${cleanName}`,
+        resteTitle: `Reste : ${cleanName}`,
+      }
+    }
+
+    it("trouve le déjeuner du jour même pour le dîner", () => {
+      const slots: TestSlot[] = [
+        { date: "2026-10-09", kind: "lunch", meal: { id: "1", name: "Quiche lorraine" } },
+        { date: "2026-10-08", kind: "dinner", meal: { id: "2", name: "Pâtes carbo" } },
+      ]
+      const prev = findPreviousMeal("2026-10-09", "dinner", slots)
+      expect(prev?.cleanName).toBe("Quiche lorraine")
+      expect(prev?.label).toBe("Reste de ce midi : Quiche lorraine")
+      expect(prev?.resteTitle).toBe("Reste : Quiche lorraine")
+    })
+
+    it("trouve le dîner de la veille pour le déjeuner", () => {
+      const slots: TestSlot[] = [
+        { date: "2026-10-08", kind: "dinner", meal: { id: "2", name: "Lasagnes" } },
+        { date: "2026-10-08", kind: "lunch", meal: { id: "3", name: "Salade" } },
+      ]
+      const prev = findPreviousMeal("2026-10-09", "lunch", slots)
+      expect(prev?.cleanName).toBe("Lasagnes")
+      expect(prev?.label).toBe("Reste de la veille : Lasagnes")
+      expect(prev?.resteTitle).toBe("Reste : Lasagnes")
+    })
+
+    it("renvoie null si aucun repas antérieur n'est planifié", () => {
+      const slots: TestSlot[] = [
+        { date: "2026-10-09", kind: "dinner", meal: { id: "1", name: "Pizza" } },
+      ]
+      const prev = findPreviousMeal("2026-10-09", "lunch", slots)
+      expect(prev).toBeNull()
+    })
+  })
+
+  describe("Détection anti-duplication de plat dans les idées", () => {
+    const existingMeals = [
+      { id: "1", name: "Poulet Rôti" },
+      { id: "2", name: "Pâtes Bolognaise" },
+    ]
+
+    function checkDuplicate(name: string, meals: typeof existingMeals) {
+      const norm = normalizeName(name)
+      if (!norm) return null
+      return meals.find((m) => normalizeName(m.name) === norm) ?? null
+    }
+
+    it("détecte un plat existant malgré la casse et les espaces", () => {
+      const match = checkDuplicate("  poulet rôti  ", existingMeals)
+      expect(match?.id).toBe("1")
+      expect(match?.name).toBe("Poulet Rôti")
+    })
+
+    it("autorise un plat distinct", () => {
+      const match = checkDuplicate("Poulet au curry", existingMeals)
+      expect(match).toBeNull()
+    })
+  })
 })
