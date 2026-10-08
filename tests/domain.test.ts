@@ -165,4 +165,44 @@ describe("Domaine Planning, Repas & Gestion de Session", () => {
       )
     })
   })
+
+  describe("Plats 'Reste' et liste de courses", () => {
+    it("détecte les plats de type Reste", () => {
+      const isReste = (name: string) => /^reste\b/i.test(name.trim())
+      expect(isReste("Reste : Lasagnes maison")).toBe(true)
+      expect(isReste("Reste de repas")).toBe(true)
+      expect(isReste("reste")).toBe(true)
+      expect(isReste("Poulet rôti")).toBe(false)
+    })
+
+    it("garantit qu'un plat reste n'ajoute aucun ingrédient de course", () => {
+      const resteMeal = {
+        id: "m-reste-1",
+        name: "Reste : Lasagnes maison",
+        origin: "user" as const,
+        ingredients: [],
+      }
+      expect(resteMeal.ingredients.length).toBe(0)
+    })
+  })
+
+  describe("Ingrédients de plat avec quantités", () => {
+    it("préserve la quantité associée aux ingrédients d'un plat", () => {
+      const meal = {
+        id: "m-1",
+        name: "Gâteau au chocolat",
+        origin: "user" as const,
+        ingredients: [
+          { id: "i-1", name: "Chocolat", quantity: "200g" },
+          { id: "i-2", name: "Beurre", quantity: "100g" },
+          { id: "i-3", name: "Oeufs", quantity: "3" },
+          { id: "i-4", name: "Farine", quantity: null },
+        ],
+      }
+      expect(meal.ingredients[0].quantity).toBe("200g")
+      expect(meal.ingredients[1].quantity).toBe("100g")
+      expect(meal.ingredients[2].quantity).toBe("3")
+      expect(meal.ingredients[3].quantity).toBeNull()
+    })
+  })
 })

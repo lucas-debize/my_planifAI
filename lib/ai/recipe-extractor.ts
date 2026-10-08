@@ -1,9 +1,60 @@
 import { displayName, normalizeName } from "@/lib/ingredients"
 
+export type ExtractedIngredient = {
+  name: string
+  quantity?: string
+  raw: string
+}
+
 export type ExtractedRecipe = {
   title: string
   ingredients: string[]
-  source?: "url" | "text" | "json-ld"
+  detailedIngredients: ExtractedIngredient[]
+  source?: "url" | "text" | "json-ld" | "image"
+}
+
+/**
+ * Détecte et extrait la quantité éventuelle au début d'un ingrédient brut.
+ */
+export function extractIngredientQuantity(raw: string): string | undefined {
+  let s = raw.trim().replace(/^(\d+[.)\]]\s*|[-*•+–—\s]+)/, "").trim()
+  s = s.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim()
+
+  const qtyMatch = s.match(
+    /^((?:\d+(?:[.,/]\d+)?|une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|quelques|un\s+peu|un\s+demi|une\s+demie?)\s*(?:(?:cuill[eè]res?|c)\.?\s*à\s*(?:soupe|caf[eé]|[sc]\.?)|kilos?|kg|grammes?|g|litres?|l|centilitres?|cl|millilitres?|ml|cas|cac|pinc[eé]es?|poign[eé]es?|belles?|gousses?|bo[iî]tes?|tranches?|sachets?|morceaux?|brins?|feuilles?|verres?|tasses?|pots?|paquets?|tablettes?|gouttes?)|\d+(?:[.,/]\d+)?\s*(?:kg|g|l|cl|ml|cas|cac)?|\b(?:un\s+demi|une\s+demie?|un\s+peu)\b)/i
+  )
+
+  if (!qtyMatch) return undefined
+
+  let q = qtyMatch[1].trim()
+  q = q
+    .replace(/^(?:un|une)\s+demie?\b/i, "1/2")
+    .replace(/^une?\b/i, "1")
+    .replace(/^deux\b/i, "2")
+    .replace(/^trois\b/i, "3")
+    .replace(/^quatre\b/i, "4")
+    .replace(/^cinq\b/i, "5")
+    .replace(/cuill[eè]res?\s*à\s*soupe/i, "c. à soupe")
+    .replace(/cuill[eè]res?\s*à\s*caf[eé]/i, "c. à café")
+  return q
+}
+
+/**
+ * Découpe et extrait le nom nettoyé ainsi que la quantité.
+ */
+export function parseIngredientLine(raw: string): ExtractedIngredient[] {
+  const item = cleanIngredientName(raw)
+  if (!item) return []
+
+  if (/^sel\s+et\s+poivre$/i.test(item)) {
+    return [
+      { name: "Sel", raw },
+      { name: "Poivre", raw },
+    ]
+  }
+
+  const quantity = extractIngredientQuantity(raw)
+  return [{ name: item, quantity, raw }]
 }
 
 // Nettoyage d'une ligne d'ingrédient individuelle
@@ -74,7 +125,7 @@ export function extractRecipeFromText(rawText: string): ExtractedRecipe {
     .filter(Boolean)
 
   if (lines.length === 0) {
-    return { title: "", ingredients: [] }
+    return { title: "", ingredients: [], detailedIngredients: [] }
   }
 
   // 1. Recherche du titre
@@ -159,39 +210,32 @@ export function extractRecipeFromText(rawText: string): ExtractedRecipe {
 
   // 3. Normalisation et déduplication des ingrédients
   const cleaned: string[] = []
+  const detailedIngredients: ExtractedIngredient[] = []
   const seenNorms = new Set<string>()
 
   for (const raw of rawIngredients) {
-    const item = cleanIngredientName(raw)
-    if (!item) continue
+    const parsedList = parseIngredientLine(raw)
+    if (parsedList.length === 0) continue
 
-    // Si c'est "Sel et poivre", décomposer en deux ingrédients distincts
-    if (/^sel\s+et\s+poivre$/i.test(item)) {
-      for (const splitItem of ["Sel", "Poivre"]) {
-        const norm = normalizeName(splitItem)
-        if (!seenNorms.has(norm)) {
-          seenNorms.add(norm)
-          cleaned.push(splitItem)
-        }
+    for (const parsed of parsedList) {
+      const norm = normalizeName(parsed.name)
+      // Éviter les lignes parasites qui sont des phrases d'instructions
+      if (norm.length > 60 || norm.includes("melanger") || norm.includes("verser")) {
+        continue
       }
-      continue
-    }
 
-    const norm = normalizeName(item)
-    // Éviter les lignes parasites qui sont des phrases d'instructions
-    if (norm.length > 60 || norm.includes("melanger") || norm.includes("verser")) {
-      continue
-    }
-
-    if (!seenNorms.has(norm)) {
-      seenNorms.add(norm)
-      cleaned.push(item)
+      if (!seenNorms.has(norm)) {
+        seenNorms.add(norm)
+        cleaned.push(parsed.name)
+        detailedIngredients.push(parsed)
+      }
     }
   }
 
   return {
     title: title ? displayName(title) : "Nouvelle recette",
     ingredients: cleaned,
+    detailedIngredients,
     source: "text",
   }
 }
@@ -240,15 +284,18 @@ export function extractRecipeFromHtml(html: string): ExtractedRecipe {
         }
 
         const cleanedIngs: string[] = []
+        const detailedIngs: ExtractedIngredient[] = []
         const seenNorms = new Set<string>()
 
         for (const raw of rawIngs) {
-          const item = cleanIngredientName(raw)
-          if (!item) continue
-          const norm = normalizeName(item)
-          if (!seenNorms.has(norm)) {
-            seenNorms.add(norm)
-            cleanedIngs.push(item)
+          const parsedList = parseIngredientLine(raw)
+          for (const parsed of parsedList) {
+            const norm = normalizeName(parsed.name)
+            if (!seenNorms.has(norm)) {
+              seenNorms.add(norm)
+              cleanedIngs.push(parsed.name)
+              detailedIngs.push(parsed)
+            }
           }
         }
 
@@ -256,6 +303,7 @@ export function extractRecipeFromHtml(html: string): ExtractedRecipe {
           return {
             title: displayName(title),
             ingredients: cleanedIngs,
+            detailedIngredients: detailedIngs,
             source: "json-ld",
           }
         }
@@ -296,6 +344,7 @@ export function extractRecipeFromHtml(html: string): ExtractedRecipe {
   return {
     title: title ? displayName(title) : parsed.title,
     ingredients: parsed.ingredients,
+    detailedIngredients: parsed.detailedIngredients,
     source: "url",
   }
 }

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react"
 import { toast } from "sonner"
-import { Loader2, X } from "lucide-react"
+import { Check, Loader2, Pencil, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -10,7 +10,13 @@ import { MagicRecipeDialog } from "@/components/magic-recipe-dialog"
 import { upsertMeal } from "@/lib/actions/meals"
 import { actionErrorMessage } from "@/lib/errors"
 import { displayName, normalizeName } from "@/lib/ingredients"
+import { cleanIngredientName, extractIngredientQuantity } from "@/lib/ai/recipe-extractor"
 import type { MealWithIngredients } from "@/lib/domain/meals"
+
+export type FormIngredientItem = {
+  name: string
+  quantity?: string | null
+}
 
 export function MealForm({
   meal,
@@ -28,17 +34,23 @@ export function MealForm({
   onCancel?: () => void
 }) {
   const [name, setName] = useState(meal?.name ?? initialName ?? "")
-  const [ingredients, setIngredients] = useState(
-    meal?.ingredients.map((item) => item.name) ?? []
+  const [ingredients, setIngredients] = useState<FormIngredientItem[]>(() =>
+    meal?.ingredients.map((item) => ({
+      name: item.name,
+      quantity: item.quantity ?? null,
+    })) ?? []
   )
   const [draft, setDraft] = useState("")
   const [pending, setPending] = useState(false)
   const [open, setOpen] = useState(false)
-  const [editing, setEditing] = useState<string | null>(null)
-  const [editValue, setEditValue] = useState("")
+
+  // Édition d'un ingrédient spécifique
+  const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  const [editName, setEditName] = useState("")
+  const [editQty, setEditQty] = useState("")
 
   const selectedNorms = useMemo(
-    () => new Set(ingredients.map(normalizeName)),
+    () => new Set(ingredients.map((i) => normalizeName(i.name))),
     [ingredients]
   )
 
@@ -51,20 +63,33 @@ export function MealForm({
     })
   }, [draft, knownIngredients, selectedNorms])
 
+  function parseInputToIngredient(part: string): FormIngredientItem | null {
+    const trimmed = part.trim()
+    if (!trimmed) return null
+    const cleaned = cleanIngredientName(trimmed)
+    const name = displayName(cleaned || trimmed)
+    if (!name) return null
+    const quantity = extractIngredientQuantity(trimmed) ?? null
+    return { name, quantity }
+  }
+
   function addIngredient(value: string) {
     const parts = value
       .split(",")
       .map((part) => part.trim())
       .filter(Boolean)
     if (parts.length === 0) return
+
     setIngredients((current) => {
       const next = [...current]
-      const seen = new Set(current.map(normalizeName))
+      const seen = new Set(current.map((i) => normalizeName(i.name)))
       for (const part of parts) {
-        const norm = normalizeName(part)
+        const item = parseInputToIngredient(part)
+        if (!item) continue
+        const norm = normalizeName(item.name)
         if (!norm || seen.has(norm)) continue
         seen.add(norm)
-        next.push(part.replace(/\s+/g, " "))
+        next.push(item)
       }
       return next
     })
@@ -72,21 +97,46 @@ export function MealForm({
     setOpen(false)
   }
 
-  function saveChip(original: string) {
-    const next = displayName(editValue)
-    if (!next) {
-      setEditing(null)
+  function startEditing(index: number) {
+    const target = ingredients[index]
+    if (!target) return
+    setEditingIndex(index)
+    setEditName(target.name)
+    setEditQty(target.quantity ?? "")
+  }
+
+  function saveEditing() {
+    if (editingIndex === null) return
+    const target = ingredients[editingIndex]
+    if (!target) {
+      setEditingIndex(null)
       return
     }
-    const nextNorm = normalizeName(next)
+
+    const nextName = displayName(editName)
+    if (!nextName) {
+      // Si le nom est vidé, on supprime l'ingrédient
+      setIngredients((current) => current.filter((_, idx) => idx !== editingIndex))
+      setEditingIndex(null)
+      return
+    }
+
+    const nextNorm = normalizeName(nextName)
+    const nextQty = editQty.trim() || null
+
     setIngredients((current) => {
       const taken = current.some(
-        (value) => value !== original && normalizeName(value) === nextNorm
+        (item, idx) => idx !== editingIndex && normalizeName(item.name) === nextNorm
       )
-      if (taken) return current
-      return current.map((value) => (value === original ? next : value))
+      if (taken) {
+        toast.error("Cet ingrédient est déjà présent dans la liste.")
+        return current
+      }
+      return current.map((item, idx) =>
+        idx === editingIndex ? { name: nextName, quantity: nextQty } : item
+      )
     })
-    setEditing(null)
+    setEditingIndex(null)
   }
 
   function onDraftKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
@@ -107,14 +157,16 @@ export function MealForm({
     if (draft.trim()) {
       const parts = draft
         .split(",")
-        .map((part) => displayName(part))
+        .map((part) => part.trim())
         .filter(Boolean)
-      const seen = new Set(submitIngredients.map(normalizeName))
+      const seen = new Set(submitIngredients.map((i) => normalizeName(i.name)))
       for (const part of parts) {
-        const norm = normalizeName(part)
+        const item = parseInputToIngredient(part)
+        if (!item) continue
+        const norm = normalizeName(item.name)
         if (!norm || seen.has(norm)) continue
         seen.add(norm)
-        submitIngredients.push(part)
+        submitIngredients.push(item)
       }
       setIngredients(submitIngredients)
       setDraft("")
@@ -145,15 +197,28 @@ export function MealForm({
           <MagicRecipeDialog
             onRecipeExtracted={(extracted) => {
               if (extracted.title) setName(extracted.title)
-              if (extracted.ingredients.length > 0) {
+              if (extracted.detailedIngredients && extracted.detailedIngredients.length > 0) {
                 setIngredients((current) => {
-                  const seen = new Set(current.map(normalizeName))
+                  const seen = new Set(current.map((i) => normalizeName(i.name)))
+                  const next = [...current]
+                  for (const ing of extracted.detailedIngredients) {
+                    const norm = normalizeName(ing.name)
+                    if (!seen.has(norm)) {
+                      seen.add(norm)
+                      next.push({ name: ing.name, quantity: ing.quantity ?? null })
+                    }
+                  }
+                  return next
+                })
+              } else if (extracted.ingredients.length > 0) {
+                setIngredients((current) => {
+                  const seen = new Set(current.map((i) => normalizeName(i.name)))
                   const next = [...current]
                   for (const ing of extracted.ingredients) {
                     const norm = normalizeName(ing)
                     if (!seen.has(norm)) {
                       seen.add(norm)
-                      next.push(ing)
+                      next.push({ name: ing, quantity: null })
                     }
                   }
                   return next
@@ -172,62 +237,113 @@ export function MealForm({
       </div>
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor="ingredient-draft">Ingrédients</Label>
+        <div className="flex items-center justify-between">
+          <Label htmlFor="ingredient-draft">Ingrédients &amp; Quantités</Label>
+          <span className="text-[11px] text-muted-foreground">
+            Cliquez sur un ingrédient pour modifier sa quantité
+          </span>
+        </div>
+
         <div className="flex flex-wrap gap-2">
-          {ingredients.map((item) =>
-            editing === item ? (
-              <Input
-                key={item}
-                value={editValue}
-                autoFocus
-                maxLength={80}
-                aria-label={`Modifier ${item}`}
-                className="h-12 min-h-12 w-full max-w-[14rem]"
-                onChange={(event) => setEditValue(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault()
-                    saveChip(item)
-                  }
-                  if (event.key === "Escape") setEditing(null)
-                }}
-                onBlur={() => saveChip(item)}
-              />
-            ) : (
-              <span
-                key={item}
-                className="inline-flex min-h-12 items-center gap-1 rounded-full bg-muted px-3 text-sm text-ink"
+          {ingredients.map((item, index) =>
+            editingIndex === index ? (
+              <div
+                key={index}
+                className="inline-flex min-h-12 items-center gap-1.5 rounded-xl border border-primary bg-surface p-1 shadow-xs"
               >
+                <Input
+                  value={editQty}
+                  placeholder="Qté"
+                  autoFocus
+                  maxLength={40}
+                  className="h-9 w-20 px-2 font-mono text-xs"
+                  onChange={(e) => setEditQty(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault()
+                      saveEditing()
+                    }
+                    if (e.key === "Escape") setEditingIndex(null)
+                  }}
+                />
+                <Input
+                  value={editName}
+                  maxLength={80}
+                  className="h-9 w-32 px-2 text-xs"
+                  onChange={(e) => setEditName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault()
+                      saveEditing()
+                    }
+                    if (e.key === "Escape") setEditingIndex(null)
+                  }}
+                />
                 <button
                   type="button"
-                  className="tap-press max-w-[12rem] truncate"
-                  onClick={() => {
-                    setEditing(item)
-                    setEditValue(item)
-                  }}
+                  onClick={saveEditing}
+                  aria-label="Valider la modification"
+                  className="tap-press inline-flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/90"
                 >
-                  {item}
+                  <Check className="size-4" />
                 </button>
                 <button
                   type="button"
-                  className="tap-press inline-flex size-8 items-center justify-center rounded-full hover:bg-background"
-                  aria-label={`Supprimer ${item}`}
+                  onClick={() => setEditingIndex(null)}
+                  aria-label="Annuler la modification"
+                  className="tap-press inline-flex size-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
+            ) : (
+              <span
+                key={index}
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-full border border-line bg-muted/60 pl-2.5 pr-1.5 py-1 text-sm text-ink transition-colors hover:border-line-active"
+              >
+                {item.quantity ? (
+                  <span className="rounded bg-primary/15 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-primary">
+                    {item.quantity}
+                  </span>
+                ) : null}
+                <button
+                  type="button"
+                  className="tap-press max-w-[14rem] truncate text-xs font-medium hover:underline"
+                  onClick={() => startEditing(index)}
+                  title="Modifier le nom ou la quantité"
+                >
+                  {item.name}
+                </button>
+                <button
+                  type="button"
+                  className="tap-press inline-flex size-6 items-center justify-center rounded-full text-muted-foreground hover:bg-background hover:text-ink"
+                  onClick={() => startEditing(index)}
+                  aria-label={`Modifier ${item.name}`}
+                  title="Modifier"
+                >
+                  <Pencil className="size-3" />
+                </button>
+                <button
+                  type="button"
+                  className="tap-press inline-flex size-6 items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  aria-label={`Supprimer ${item.name}`}
                   onClick={() =>
                     setIngredients((current) =>
-                      current.filter((value) => value !== item)
+                      current.filter((_, idx) => idx !== index)
                     )
                   }
                 >
-                  <X className="size-4" />
+                  <X className="size-3.5" />
                 </button>
               </span>
             )
           )}
         </div>
+
         <Input
           id="ingredient-draft"
           value={draft}
-          placeholder="Entrée ou virgule pour ajouter"
+          placeholder="ex: 200g farine, 3 oeufs, 1 c. à soupe d'huile..."
           onChange={(event) => {
             setDraft(event.target.value)
             setOpen(true)

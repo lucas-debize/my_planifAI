@@ -1,6 +1,8 @@
 import { describe, it, expect } from "bun:test"
 import {
   cleanIngredientName,
+  extractIngredientQuantity,
+  parseIngredientLine,
   extractRecipeFromText,
   extractRecipeFromHtml,
 } from "@/lib/ai/recipe-extractor"
@@ -54,6 +56,25 @@ describe("Import magique de recette (NLP & Extraction locale)", () => {
     })
   })
 
+  describe("extractIngredientQuantity & parseIngredientLine", () => {
+    it("détecte les quantités numériques, unités et fractions", () => {
+      expect(extractIngredientQuantity("200g de farine")).toBe("200g")
+      expect(extractIngredientQuantity("3 oeufs")).toBe("3")
+      expect(extractIngredientQuantity("20 cl de crème")).toBe("20 cl")
+      expect(extractIngredientQuantity("2 cuillères à soupe d'huile")).toBe("2 c. à soupe")
+      expect(extractIngredientQuantity("un demi citron")).toBe("1/2")
+      expect(extractIngredientQuantity("1 pincée de sel")).toBe("1 pincée")
+      expect(extractIngredientQuantity("Carottes")).toBe(undefined)
+    })
+
+    it("structure l'ingrédient avec nom et quantité", () => {
+      const parsed = parseIngredientLine("200g de chèvre")
+      expect(parsed.length).toBe(1)
+      expect(parsed[0].name).toBe("Chèvre")
+      expect(parsed[0].quantity).toBe("200g")
+    })
+  })
+
   describe("extractRecipeFromText", () => {
     it("extrait une recette structurée avec sections", () => {
       const text = `
@@ -80,8 +101,10 @@ Faire suer les poireaux dans une poêle...
       expect(extracted.ingredients).toContain("Sel")
       expect(extracted.ingredients).toContain("Poivre")
       expect(extracted.ingredients).not.toContain("Faire suer les poireaux")
+      expect(extracted.detailedIngredients.find((i) => i.name === "Poireaux")?.quantity).toBe("3")
+      expect(extracted.detailedIngredients.find((i) => i.name === "Chèvre")?.quantity).toBe("200g")
+      expect(extracted.detailedIngredients.find((i) => i.name === "Crème fraîche")?.quantity).toBe("20cl")
     })
-
     it("extrait un mémo rapide sans section explicite", () => {
       const text = `
 Pâtes carbonara rapides

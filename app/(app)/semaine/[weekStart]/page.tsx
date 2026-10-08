@@ -1,7 +1,7 @@
 import { addDays } from "date-fns"
 import { redirect } from "next/navigation"
 import { WeekBoard } from "@/components/week-board"
-import { listMeals, listPersonalMeals } from "@/lib/actions/meals"
+import { listMeals, listPersonalMeals, listFamilyMeals } from "@/lib/actions/meals"
 import { getWeekSlots } from "@/lib/actions/slots"
 import { getPlanningScope } from "@/lib/actions/session"
 import {
@@ -38,7 +38,8 @@ export default async function SemainePage({
 
   const personalMeals =
     scope.type === "family" ? await listPersonalMeals() : []
-
+  const familyMeals =
+    scope.type === "personal" ? await listFamilyMeals() : []
   return (
     <WeekBoard
       key={weekStart}
@@ -49,6 +50,7 @@ export default async function SemainePage({
       ]}
       meals={meals}
       personalMeals={personalMeals}
+      familyMeals={familyMeals}
       isFamilyMode={scope.type === "family"}
     />
   )

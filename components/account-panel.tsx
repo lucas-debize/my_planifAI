@@ -1,7 +1,15 @@
 "use client"
 
-import { useEffect, useSyncExternalStore, useActionState, useRef } from "react"
+import { useEffect, useSyncExternalStore, useActionState, useState } from "react"
 import { useTheme } from "next-themes"
+import {
+  Check,
+  Copy,
+  Link2,
+  Mail,
+  Smartphone,
+} from "lucide-react"
+import { toast } from "sonner"
 import {
   addGoogleAccount,
   rememberAccount,
@@ -23,7 +31,6 @@ import { PageHeader } from "@/components/page-header"
 import { cn } from "@/lib/utils"
 
 const THEMES = [
-  { value: "system", label: "Auto" },
   { value: "light", label: "Clair" },
   { value: "dark", label: "Sombre" },
 ] as const
@@ -32,16 +39,6 @@ function subscribe() {
   return () => {}
 }
 
-function useIosInstallHint() {
-  return useSyncExternalStore(
-    subscribe,
-    () =>
-      typeof navigator !== "undefined" &&
-      /iPad|iPhone/.test(navigator.userAgent) &&
-      !("standalone" in navigator && (navigator as unknown as { standalone: boolean }).standalone),
-    () => false
-  )
-}
 
 function useHasMounted() {
   return useSyncExternalStore(subscribe, () => true, () => false)
@@ -101,11 +98,13 @@ function FamilySection({
   members,
   isAdmin,
   authUid,
+  initialJoinCode,
 }: {
   family: FamilyRow | null
   members: FamilyMemberRow[]
   isAdmin: boolean
   authUid: string | null
+  initialJoinCode?: string | null
 }) {
   const [createState, createAction, createPending] = useActionState(
     createFamilyAction,
@@ -115,15 +114,23 @@ function FamilySection({
     joinFamilyAction,
     null
   )
-  const codeRef = useRef<HTMLInputElement>(null)
+
+  const [joinCodeInput, setJoinCodeInput] = useState(initialJoinCode ?? "")
+  const [copiedLink, setCopiedLink] = useState(false)
+  const [copiedCode, setCopiedCode] = useState(false)
+
+  useEffect(() => {
+    if (initialJoinCode && !family) {
+      toast.info(`Code d'invitation « ${initialJoinCode} » détecté. Cliquez sur « Rejoindre ».`)
+    }
+  }, [initialJoinCode, family])
 
   if (!family) {
     return (
       <section className="flex flex-col gap-3">
         <h2 className="text-sm font-medium text-ink">Groupe familial</h2>
         <p className="text-sm text-muted-foreground">
-          Crée un groupe pour partager repas, planning et courses avec ta
-          famille.
+          Créez un groupe pour partager vos repas, planning et courses avec vos proches.
         </p>
 
         <form action={createAction} className="flex flex-col gap-2">
@@ -164,17 +171,19 @@ function FamilySection({
             className="text-xs text-muted-foreground"
             htmlFor="invite-code"
           >
-            Code d&apos;invitation
+            Rejoindre avec un code d&apos;invitation
           </label>
           <div className="flex gap-2">
             <input
               id="invite-code"
               name="code"
               type="text"
+              value={joinCodeInput}
+              onChange={(e) => setJoinCodeInput(e.target.value)}
               placeholder="ex: a1b2c3d4"
               maxLength={16}
               required
-              className="min-h-10 flex-1 rounded-[0.75rem] border border-line bg-surface px-3 text-sm font-mono"
+              className="min-h-10 flex-1 rounded-[0.75rem] border border-line bg-surface px-3 text-sm font-mono tracking-wider uppercase"
             />
             <Button
               type="submit"
@@ -192,7 +201,17 @@ function FamilySection({
       </section>
     )
   }
+
   const isFull = members.length >= 10
+
+  const inviteUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/compte?join=${family.invite_code}`
+      : `https://myplanifai.vercel.app/compte?join=${family.invite_code}`
+
+  const mailSubject = `Rejoins notre groupe ${family.name} sur PlanifIA`
+  const mailBody = `Salut !\n\nRejoins notre planning de repas familial "${family.name}" sur PlanifIA pour partager menus, idées de recettes et listes de courses en un clic :\n\n👉 Clique ici pour nous rejoindre : ${inviteUrl}\n\n(Ou entre directement le code d'invitation : ${family.invite_code})\n\nÀ tout de suite !`
+  const mailtoHref = `mailto:?subject=${encodeURIComponent(mailSubject)}&body=${encodeURIComponent(mailBody)}`
 
   return (
     <section className="flex flex-col gap-3">
@@ -241,32 +260,78 @@ function FamilySection({
           </p>
         </div>
       ) : (
-        <div className="flex flex-col gap-1">
-          <span className="text-xs text-muted-foreground">
-            Code d&apos;invitation — partage-le pour inviter ta famille
-          </span>
-          <div className="flex items-center gap-2">
-            <code className="flex-1 rounded-[0.75rem] border border-line bg-surface px-3 py-2 text-sm font-mono tracking-wider">
-              {family.invite_code}
-            </code>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="min-h-10 shrink-0"
-              onClick={() => {
-                void navigator.clipboard.writeText(family.invite_code)
-                if (codeRef.current) codeRef.current.textContent = "Copié !"
-                setTimeout(() => {
-                  if (codeRef.current) codeRef.current.textContent = "Copier"
-                }, 2000)
-              }}
-            >
-              <span ref={codeRef}>Copier</span>
-            </Button>
+        /* Volet d'invitation avec e-mail en priorité */
+        <div className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-3.5 shadow-xs">
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-semibold text-ink">
+              1. Inviter par e-mail (recommandé)
+            </span>
+            <p className="text-xs text-muted-foreground">
+              Ouvre votre boîte mail avec un message pré-rempli et le lien d&apos;adhésion directe.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Button asChild size="sm" className="gap-1.5 text-xs">
+                <a href={mailtoHref}>
+                  <Mail className="size-3.5" />
+                  <span>Envoyer par e-mail</span>
+                </a>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5 text-xs"
+                onClick={() => {
+                  void navigator.clipboard.writeText(inviteUrl)
+                  setCopiedLink(true)
+                  toast.success("Lien d'invitation copié dans le presse-papier !")
+                  setTimeout(() => setCopiedLink(false), 2000)
+                }}
+              >
+                {copiedLink ? (
+                  <Check className="size-3.5 text-accent" />
+                ) : (
+                  <Link2 className="size-3.5" />
+                )}
+                <span>{copiedLink ? "Lien copié !" : "Copier le lien"}</span>
+              </Button>
+            </div>
+          </div>
+
+          <div className="h-px bg-line/80" />
+
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-semibold text-ink">
+              2. Ou partager le code d&apos;invitation
+            </span>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 rounded-[0.75rem] border border-line bg-muted/40 px-3 py-2 text-sm font-mono tracking-wider font-semibold">
+                {family.invite_code}
+              </code>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="min-h-10 shrink-0 gap-1.5 text-xs"
+                onClick={() => {
+                  void navigator.clipboard.writeText(family.invite_code)
+                  setCopiedCode(true)
+                  toast.success("Code copié dans le presse-papier !")
+                  setTimeout(() => setCopiedCode(false), 2000)
+                }}
+              >
+                {copiedCode ? (
+                  <Check className="size-3.5 text-accent" />
+                ) : (
+                  <Copy className="size-3.5" />
+                )}
+                <span>{copiedCode ? "Copié !" : "Copier le code"}</span>
+              </Button>
+            </div>
           </div>
         </div>
       )}
+
       <div className="flex flex-col gap-2 sm:flex-row">
         {!isAdmin ? (
           <form action={leaveFamilyAction}>
@@ -297,6 +362,7 @@ export function AccountPanel({
   familyMembers = [],
   isFamilyAdmin = false,
   authUid = null,
+  initialJoinCode = null,
 }: {
   current: SavedAccount | null
   accounts: SavedAccount[]
@@ -305,12 +371,13 @@ export function AccountPanel({
   familyMembers?: FamilyMemberRow[]
   isFamilyAdmin?: boolean
   authUid?: string | null
+  initialJoinCode?: string | null
 }) {
   const { theme, setTheme } = useTheme()
   const mounted = useHasMounted()
-  const iosHint = useIosInstallHint()
   const others = accounts.filter((account) => account.id !== current?.id)
   const showSignOutAll = accounts.length > 1
+
   useEffect(() => {
     void rememberAccount()
   }, [])
@@ -383,23 +450,25 @@ export function AccountPanel({
             members={familyMembers}
             isAdmin={isFamilyAdmin}
             authUid={authUid}
+            initialJoinCode={initialJoinCode}
           />
         ) : null}
 
+        {/* Section Apparence : uniquement Clair et Sombre */}
         <fieldset>
           <legend className="mb-2 text-sm text-muted-foreground">
             Apparence
           </legend>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {THEMES.map((item) => (
               <button
                 key={item.value}
                 type="button"
                 className={cn(
-                  "min-h-12 rounded-[0.75rem] border px-3 text-sm",
+                  "min-h-12 rounded-[0.75rem] border px-3 text-sm font-medium transition-colors",
                   mounted && theme === item.value
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-line bg-surface"
+                    ? "border-primary bg-primary text-primary-foreground font-semibold"
+                    : "border-line bg-surface hover:bg-muted text-ink"
                 )}
                 onClick={() => setTheme(item.value)}
               >
@@ -408,11 +477,29 @@ export function AccountPanel({
             ))}
           </div>
         </fieldset>
-        {iosHint ? (
-          <p className="text-sm text-muted-foreground">
-            Sur iPhone : Partager → Sur l&apos;écran d&apos;accueil
+
+        {/* Guide d'installation iPhone / iOS */}
+        <div className="flex flex-col gap-2 rounded-xl border border-primary/20 bg-primary/5 p-3.5 text-xs">
+          <div className="flex items-center gap-2 font-semibold text-primary">
+            <Smartphone className="size-4 shrink-0" />
+            <span>Installer PlanifIA sur iPhone</span>
+          </div>
+          <ol className="list-decimal space-y-1.5 pl-4 text-muted-foreground">
+            <li>
+              Dans Safari sur votre iPhone, touchez le bouton <strong>Partager</strong> ⎋ (carré avec flèche vers le haut).
+            </li>
+            <li>
+              Faites défiler vers le bas et sélectionnez <strong>Sur l&apos;écran d&apos;accueil</strong> ➕.
+            </li>
+            <li>
+              Appuyez sur <strong>Ajouter</strong> en haut à droite.
+            </li>
+          </ol>
+          <p className="text-[11px] text-muted-foreground/90 pt-0.5">
+            ✨ L&apos;application s&apos;ouvre en plein écran sans barre Safari, rapide et réactive.
           </p>
-        ) : null}
+        </div>
+
         <div className="flex flex-col gap-2 sm:flex-row">
           <form action={signOut}>
             <Button type="submit" variant="outline" className="min-h-12">

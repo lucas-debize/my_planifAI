@@ -25,7 +25,13 @@ function mergeAccounts(
   ]
 }
 
-export default async function ComptePage() {
+export default async function ComptePage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ join?: string }>
+}) {
+  const resolvedParams = searchParams ? await searchParams : undefined
+  const initialJoinCode = resolvedParams?.join?.trim() || null
   const current = await getCurrentIdentity()
   const accounts = mergeAccounts(current, await listSavedAccounts())
 
@@ -53,6 +59,7 @@ export default async function ComptePage() {
       familyMembers={familyInfo?.members ?? []}
       isFamilyAdmin={familyInfo?.isAdmin ?? false}
       authUid={authUid}
+      initialJoinCode={initialJoinCode}
     />
   )
 }

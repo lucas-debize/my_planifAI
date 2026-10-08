@@ -26,6 +26,7 @@ export type MealIngredientRow = {
   meal_id: string
   ingredient_id: string
   position: number
+  quantity?: string | null
 }
 
 export type PlanSlotRow = {

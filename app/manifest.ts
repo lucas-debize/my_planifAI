@@ -2,10 +2,12 @@ import type { MetadataRoute } from "next"
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "MyPlanifAI",
-    short_name: "MyPlanifAI",
+    name: "PlanifIA — Planning & Recettes",
+    short_name: "PlanifIA",
+    description: "Planifiez vos repas et listes de courses en famille.",
     start_url: "/semaine",
     display: "standalone",
+    orientation: "portrait-primary",
     lang: "fr",
     background_color: "#2C4A3E",
     theme_color: "#2C4A3E",
@@ -14,10 +16,17 @@ export default function manifest(): MetadataRoute.Manifest {
         src: "/icon-192.png",
         sizes: "192x192",
         type: "image/png",
+        purpose: "any",
       },
       {
         src: "/icon-512.png",
         sizes: "512x512",
+        type: "image/png",
+        purpose: "any",
+      },
+      {
+        src: "/apple-touch-icon.png",
+        sizes: "180x180",
         type: "image/png",
         purpose: "any",
       },

@@ -9,9 +9,11 @@ import {
   copyMeal as copyMealDomain,
   type MealScope,
   type MealWithIngredients,
+  type UpsertMealIngredientInput,
 } from "@/lib/domain/meals"
 import { requireScopedContext, revalidateApp } from "@/lib/actions/session"
 import { getCurrentIdentity } from "@/lib/accounts/identity"
+import { getMyFamily } from "@/lib/domain/families"
 
 function toMealScope(
   scope: { type: "personal" | "family"; familyId: string | null },
@@ -33,6 +35,17 @@ export async function listPersonalMeals(): Promise<MealWithIngredients[]> {
   return listPersonalMealsDomain(supabase, authUid)
 }
 
+export async function listFamilyMeals(): Promise<MealWithIngredients[]> {
+  const { supabase, authUid } = await requireScopedContext()
+  const familyInfo = await getMyFamily(supabase, authUid)
+  if (!familyInfo) return []
+  return listMealsDomain(supabase, {
+    type: "family",
+    familyId: familyInfo.family.id,
+    userId: authUid,
+  })
+}
+
 export async function getMeal(id: string): Promise<MealWithIngredients | null> {
   const { supabase, authUid, scope } = await requireScopedContext()
   return getMealDomain(supabase, toMealScope(scope, authUid), id)
@@ -41,7 +54,7 @@ export async function getMeal(id: string): Promise<MealWithIngredients | null> {
 export async function upsertMeal(input: {
   id?: string
   name: string
-  ingredientNames: string[]
+  ingredientNames: UpsertMealIngredientInput[]
 }): Promise<MealWithIngredients> {
   const { supabase, authUid, scope } = await requireScopedContext()
   const meal = await upsertMealDomain(supabase, toMealScope(scope, authUid), {

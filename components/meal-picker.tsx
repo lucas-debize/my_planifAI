@@ -23,9 +23,18 @@ import { MealForm } from "@/components/meal-form"
 import { parseISODate, slotTitleDate } from "@/lib/dates"
 import { SLOT_LABEL, type SlotKind } from "@/lib/week"
 import type { MealWithIngredients } from "@/lib/domain/meals"
+import type { WeekSlot } from "@/lib/domain/slots"
 import { useMediaQuery } from "@/hooks/use-media-query"
 import { tapFeedback } from "@/hooks/use-press"
 import { cn } from "@/lib/utils"
+
+export function ingredientCountLabel(count: number) {
+  if (count === 0) return "Aucun ingrédient"
+  if (count === 1) return "1 ingrédient"
+  return `${count} ingrédients`
+}
+
+export type AssignSource = "normal" | "personal" | "family" | "reste"
 
 export function MealPicker({
   open,
@@ -35,6 +44,8 @@ export function MealPicker({
   currentMeal,
   meals,
   personalMeals = [],
+  familyMeals = [],
+  weekSlots = [],
   isFamilyMode = false,
   onAssign,
 }: {
@@ -45,25 +56,60 @@ export function MealPicker({
   currentMeal: { id: string; name: string } | null
   meals: MealWithIngredients[]
   personalMeals?: MealWithIngredients[]
+  familyMeals?: MealWithIngredients[]
+  weekSlots?: WeekSlot[]
   isFamilyMode?: boolean
   onAssign: (
     meal: { id: string; name: string } | null,
-    isPersonal?: boolean
+    source?: AssignSource
   ) => void
 }) {
   const isDesktop = useMediaQuery("(min-width: 768px)")
-  const [tab, setTab] = useState<"family" | "personal">("family")
+  const hasFamilyGroup = isFamilyMode || familyMeals.length > 0
+
+  // Onglet courant : "primary" (catalogue actif) ou "secondary" (autre catalogue importable)
+  const [tab, setTab] = useState<"primary" | "secondary">("primary")
   const [query, setQuery] = useState("")
   const [creating, setCreating] = useState(false)
+  const [pickingReste, setPickingReste] = useState(false)
   const [pickingId, setPickingId] = useState<string | null>(null)
   const closeTimer = useRef<number | null>(null)
   const parsed = parseISODate(date)
   const dateLabel = parsed ? slotTitleDate(parsed) : date
+
   const title = creating
     ? `Nouvelle idée · ${SLOT_LABEL[kind]}`
-    : `${SLOT_LABEL[kind]} · ${dateLabel}`
+    : pickingReste
+      ? `🍲 Poser un reste · ${SLOT_LABEL[kind]}`
+      : `${SLOT_LABEL[kind]} · ${dateLabel}`
 
-  const activeMealList = isFamilyMode && tab === "personal" ? personalMeals : meals
+  // Liste active selon l'onglet
+  // En mode famille : primary = family (meals), secondary = personal (personalMeals)
+  // En mode perso : primary = personal (meals), secondary = family (familyMeals)
+  const activeMealList = useMemo(() => {
+    if (isFamilyMode) {
+      return tab === "secondary" ? personalMeals : meals
+    }
+    return tab === "secondary" ? familyMeals : meals
+  }, [isFamilyMode, tab, meals, personalMeals, familyMeals])
+
+  const isCrossScopeTab = tab === "secondary"
+
+  // Plats cuisinés plus tôt dans la semaine pour l'option rapide "Reste"
+  const previousMeals = useMemo(() => {
+    const seen = new Set<string>()
+    const list: string[] = []
+    for (const slot of weekSlots) {
+      if (slot.meal?.name) {
+        const cleanName = slot.meal.name.replace(/^reste\s*:\s*/i, "").trim()
+        if (cleanName && !seen.has(cleanName.toLowerCase())) {
+          seen.add(cleanName.toLowerCase())
+          list.push(cleanName)
+        }
+      }
+    }
+    return list
+  }, [weekSlots])
 
   const knownIngredients = useMemo(() => {
     const map = new Map<string, { id: string; name: string }>()
@@ -87,15 +133,16 @@ export function MealPicker({
   }, [activeMealList, query])
 
   function reset() {
-    setTab("family")
+    setTab("primary")
     setCreating(false)
+    setPickingReste(false)
     setQuery("")
     setPickingId(null)
   }
 
   function assign(
     meal: { id: string; name: string } | null,
-    fromPersonal = false
+    source: AssignSource = "normal"
   ) {
     if (pickingId) return
     tapFeedback()
@@ -104,7 +151,7 @@ export function MealPicker({
     if (closeTimer.current) window.clearTimeout(closeTimer.current)
     closeTimer.current = window.setTimeout(
       () => {
-        onAssign(meal, fromPersonal)
+        onAssign(meal, source)
         onOpenChange(false)
         reset()
       },
@@ -112,45 +159,143 @@ export function MealPicker({
     )
   }
 
-  const isFromPersonalTab = isFamilyMode && tab === "personal"
-
   const body = creating ? (
     <MealForm
       initialName={query.trim() || undefined}
       knownIngredients={knownIngredients}
       submitLabel="Ajouter au créneau"
       onCancel={() => setCreating(false)}
-      onSaved={(saved) => assign({ id: saved.id, name: saved.name }, false)}
+      onSaved={(saved) => assign({ id: saved.id, name: saved.name }, "normal")}
     />
+  ) : pickingReste ? (
+    /* Sous-vue pour poser un reste de repas */
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <button
+        type="button"
+        onClick={() => setPickingReste(false)}
+        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-ink"
+      >
+        <ArrowLeft className="size-3.5" />
+        <span>Retour aux recettes</span>
+      </button>
+
+      <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200">
+        <p className="font-semibold">🍲 Reste de repas</p>
+        <p className="text-[11px] text-amber-800/80 dark:text-amber-300/80">
+          Ce plat est enregistré sans ingrédient lié : aucun doublon ne sera ajouté à votre liste de courses.
+        </p>
+      </div>
+
+      <ScrollArea className="h-64" data-vaul-no-drag>
+        <div className="flex flex-col gap-2">
+          {previousMeals.length > 0 ? (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground">
+                Plats cuisinés dans la semaine :
+              </span>
+              {previousMeals.map((prevName) => (
+                <button
+                  key={prevName}
+                  type="button"
+                  className="tap-press flex min-h-12 w-full items-center justify-between rounded-xl border border-line bg-surface px-3 text-left hover:bg-muted"
+                  onClick={() =>
+                    assign({ id: "reste", name: `Reste : ${prevName}` }, "reste")
+                  }
+                >
+                  <span className="flex items-center gap-2 text-sm font-medium text-ink">
+                    <span>🍲</span>
+                    <span>Reste : {prevName}</span>
+                  </span>
+                  <span className="text-xs font-medium text-primary">Poser</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-muted-foreground">
+              Option générique :
+            </span>
+            <button
+              type="button"
+              className="tap-press flex min-h-12 w-full items-center justify-between rounded-xl border border-line bg-surface px-3 text-left hover:bg-muted"
+              onClick={() =>
+                assign({ id: "reste", name: "Reste de repas" }, "reste")
+              }
+            >
+              <span className="flex items-center gap-2 text-sm font-medium text-ink">
+                <span>🍲</span>
+                <span>Reste de repas</span>
+              </span>
+              <span className="text-xs font-medium text-primary">Poser</span>
+            </button>
+          </div>
+        </div>
+      </ScrollArea>
+    </div>
   ) : (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      {isFamilyMode ? (
+      {/* Bouton d'action rapide Reste */}
+      <button
+        type="button"
+        onClick={() => setPickingReste(true)}
+        className="tap-press flex w-full items-center justify-between rounded-xl border border-dashed border-amber-500/40 bg-amber-500/10 px-3 py-2 text-left text-xs font-medium text-amber-900 transition-colors hover:bg-amber-500/15 dark:text-amber-200"
+      >
+        <span className="flex items-center gap-2">
+          <span className="text-base">🍲</span>
+          <span className="font-semibold">Poser un reste</span>
+        </span>
+        <span className="text-[11px] font-normal text-amber-700 dark:text-amber-300">
+          0 ingrédient ajouté aux courses
+        </span>
+      </button>
+
+      {/* Onglets selon le contexte (famille ou perso avec groupe) */}
+      {hasFamilyGroup ? (
         <div className="grid grid-cols-2 rounded-xl bg-muted/60 p-1 text-xs font-medium">
           <button
             type="button"
             className={cn(
               "flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 transition-all",
-              tab === "family"
+              tab === "primary"
                 ? "bg-card text-ink shadow-xs font-semibold"
                 : "text-muted-foreground hover:text-ink"
             )}
-            onClick={() => setTab("family")}
+            onClick={() => setTab("primary")}
           >
-            <Users className="size-3.5" />
-            <span>Plats de la famille</span>
+            {isFamilyMode ? (
+              <>
+                <Users className="size-3.5" />
+                <span>Plats de la famille</span>
+              </>
+            ) : (
+              <>
+                <User className="size-3.5" />
+                <span>Mes recettes perso</span>
+              </>
+            )}
           </button>
           <button
             type="button"
             className={cn(
               "flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 transition-all",
-              tab === "personal"
+              tab === "secondary"
                 ? "bg-card text-ink shadow-xs font-semibold"
                 : "text-muted-foreground hover:text-ink"
             )}
-            onClick={() => setTab("personal")}
+            onClick={() => setTab("secondary")}
           >
-            <User className="size-3.5" />
-            <span>Mes recettes perso</span>
+            {isFamilyMode ? (
+              <>
+                <User className="size-3.5" />
+                <span>Mes recettes perso</span>
+              </>
+            ) : (
+              <>
+                <Users className="size-3.5" />
+                <span>Recettes du groupe</span>
+              </>
+            )}
           </button>
         </div>
       ) : null}
@@ -159,7 +304,11 @@ export function MealPicker({
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         placeholder={
-          isFromPersonalTab ? "Rechercher parmi mes plats perso" : "Rechercher un plat"
+          isCrossScopeTab
+            ? isFamilyMode
+              ? "Rechercher parmi mes plats perso..."
+              : "Rechercher dans les recettes du groupe..."
+            : "Rechercher un plat..."
         }
         aria-label="Rechercher un plat"
         data-vaul-no-drag
@@ -172,7 +321,7 @@ export function MealPicker({
               <p className="text-sm text-muted-foreground">
                 Aucun plat ne correspond à «&nbsp;{query.trim()}&nbsp;»
               </p>
-              {!isFromPersonalTab ? (
+              {!isCrossScopeTab ? (
                 <Button
                   asChild
                   variant="outline"
@@ -189,9 +338,11 @@ export function MealPicker({
             </div>
           ) : (
             <p className="px-1 py-4 text-sm text-muted-foreground">
-              {isFromPersonalTab
-                ? "Aucun plat personnel dans votre carnet."
-                : "Aucun plat dans le carnet de la famille."}
+              {isCrossScopeTab
+                ? isFamilyMode
+                  ? "Aucun plat personnel dans votre carnet."
+                  : "Aucun plat dans le carnet du groupe."
+                : "Aucun plat disponible."}
             </p>
           )
         ) : (
@@ -199,7 +350,7 @@ export function MealPicker({
             {filtered.map((meal) => {
               const chosen =
                 pickingId === meal.id ||
-                (!pickingId && !isFromPersonalTab && currentMeal?.id === meal.id)
+                (!pickingId && !isCrossScopeTab && currentMeal?.id === meal.id)
               return (
                 <li key={meal.id}>
                   <button
@@ -208,14 +359,27 @@ export function MealPicker({
                       "tap-press flex min-h-12 w-full items-center justify-between gap-3 rounded-[0.75rem] px-3 text-left",
                       chosen ? "bg-muted" : "hover:bg-muted"
                     )}
-                    onClick={() => assign({ id: meal.id, name: meal.name }, isFromPersonalTab)}
+                    onClick={() =>
+                      assign(
+                        { id: meal.id, name: meal.name },
+                        isCrossScopeTab
+                          ? isFamilyMode
+                            ? "personal"
+                            : "family"
+                          : "normal"
+                      )
+                    }
                   >
                     <span className="flex min-w-0 flex-col">
                       <span className="font-fraunces text-base">{meal.name}</span>
                       <span className="text-xs text-muted-foreground">
                         {ingredientCountLabel(meal.ingredients.length)}
                         {meal.createdByName ? ` · Par ${meal.createdByName}` : ""}
-                        {isFromPersonalTab ? " · Cliquez pour importer & planifier" : ""}
+                        {isCrossScopeTab
+                          ? isFamilyMode
+                            ? " · Cliquez pour importer dans le groupe"
+                            : " · Cliquez pour importer dans vos plats perso"
+                          : ""}
                       </span>
                     </span>
                     {chosen ? (
@@ -250,9 +414,9 @@ export function MealPicker({
           type="button"
           variant="ghost"
           className="min-h-12"
-          onClick={() => assign(null, false)}
+          onClick={() => assign(null, "normal")}
         >
-          {pickingId === "empty" ? "Retiré" : "Retirer"}
+          Vider ce créneau
         </Button>
       ) : null}
     </div>
@@ -263,23 +427,13 @@ export function MealPicker({
       <Dialog
         open={open}
         onOpenChange={(next) => {
-          if (!next) reset()
           onOpenChange(next)
+          if (!next) reset()
         }}
       >
-        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-md">
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            {creating ? (
-              <button
-                type="button"
-                onClick={() => setCreating(false)}
-                className="tap-press inline-flex w-fit items-center gap-1.5 text-xs text-muted-foreground hover:text-ink"
-              >
-                <ArrowLeft className="size-3.5" />
-                <span>Choisir un plat existant</span>
-              </button>
-            ) : null}
-            <DialogTitle className="font-fraunces">{title}</DialogTitle>
+            <DialogTitle className="font-fraunces text-xl">{title}</DialogTitle>
           </DialogHeader>
           {body}
           {footer}
@@ -292,38 +446,17 @@ export function MealPicker({
     <Drawer
       open={open}
       onOpenChange={(next) => {
-        if (!next) reset()
         onOpenChange(next)
+        if (!next) reset()
       }}
     >
       <DrawerContent>
         <DrawerHeader>
-          {creating ? (
-            <button
-              type="button"
-              onClick={() => setCreating(false)}
-              className="tap-press inline-flex w-fit items-center gap-1.5 text-xs text-muted-foreground hover:text-ink"
-            >
-              <ArrowLeft className="size-3.5" />
-              <span>Choisir un plat existant</span>
-            </button>
-          ) : null}
-          <DrawerTitle className="font-fraunces">{title}</DrawerTitle>
+          <DrawerTitle className="font-fraunces text-xl">{title}</DrawerTitle>
         </DrawerHeader>
-        <div
-          className="max-h-[calc(85dvh-8rem)] overflow-y-auto px-4 pb-4 overscroll-contain"
-          data-vaul-no-drag
-        >
-          {body}
-        </div>
+        <div className="px-4">{body}</div>
         {footer ? <DrawerFooter>{footer}</DrawerFooter> : null}
       </DrawerContent>
     </Drawer>
   )
-}
-
-export function ingredientCountLabel(count: number) {
-  if (count === 0) return "Sans ingrédient"
-  if (count === 1) return "1 ingrédient"
-  return `${count} ingrédients`
 }

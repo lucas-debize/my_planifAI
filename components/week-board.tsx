@@ -10,7 +10,12 @@ import { DownloadPdfButton } from "@/components/download-pdf-button"
 import { SlotCard } from "@/components/slot-card"
 import { WeekSwitcher } from "@/components/week-switcher"
 import { PageHeader } from "@/components/page-header"
-import { setSlot, assignPersonalMealToSlot } from "@/lib/actions/slots"
+import {
+  setSlot,
+  assignPersonalMealToSlot,
+  assignFamilyMealToSlot,
+  assignResteToSlot,
+} from "@/lib/actions/slots"
 import { actionErrorMessage } from "@/lib/errors"
 import {
   isPastDay,
@@ -53,12 +58,14 @@ export function WeekBoard({
   weeks,
   meals,
   personalMeals = [],
+  familyMeals = [],
   isFamilyMode = false,
 }: {
   weekStart: string
   weeks: WeekBlock[]
   meals: MealWithIngredients[]
   personalMeals?: MealWithIngredients[]
+  familyMeals?: MealWithIngredients[]
   isFamilyMode?: boolean
 }) {
   const visibleWeeks = weeks.filter((week) => parseISODate(week.start))
@@ -168,12 +175,80 @@ export function WeekBoard({
           currentMeal={pickerSlot.meal}
           meals={meals}
           personalMeals={personalMeals}
+          familyMeals={familyMeals}
+          weekSlots={slots}
           isFamilyMode={isFamilyMode}
-          onAssign={(meal, fromPersonal) => {
+          onAssign={(meal, source = "normal") => {
             const key = slotKey(picker.date, picker.kind)
             const kindLabel = SLOT_LABEL[picker.kind].toLowerCase()
 
-            if (fromPersonal && meal) {
+            if (source === "reste" && meal) {
+              startTransition(async () => {
+                setSlotsOptimistic({
+                  date: picker.date,
+                  kind: picker.kind,
+                  meal,
+                })
+                setFlash(key)
+                window.setTimeout(() => {
+                  setFlash((current) => (current === key ? null : current))
+                }, 700)
+                toast.success(`${meal.name} posé au ${kindLabel}`)
+                try {
+                  const result = await assignResteToSlot({
+                    date: picker.date,
+                    kind: picker.kind,
+                    name: meal.name,
+                  })
+                  if (result.meal?.name) {
+                    setSlotsOptimistic({
+                      date: picker.date,
+                      kind: picker.kind,
+                      meal: { id: result.meal.id, name: result.meal.name },
+                    })
+                  }
+                } catch (error) {
+                  toast.error(actionErrorMessage(error))
+                  throw error
+                }
+              })
+              return
+            }
+
+            if (source === "family" && meal) {
+              startTransition(async () => {
+                setSlotsOptimistic({
+                  date: picker.date,
+                  kind: picker.kind,
+                  meal,
+                })
+                setFlash(key)
+                window.setTimeout(() => {
+                  setFlash((current) => (current === key ? null : current))
+                }, 700)
+                toast.success("Plat importé dans vos recettes et ajouté au planning")
+                try {
+                  const result = await assignFamilyMealToSlot({
+                    date: picker.date,
+                    kind: picker.kind,
+                    mealId: meal.id,
+                  })
+                  if (result.meal?.name) {
+                    setSlotsOptimistic({
+                      date: picker.date,
+                      kind: picker.kind,
+                      meal: { id: result.meal.id, name: result.meal.name },
+                    })
+                  }
+                } catch (error) {
+                  toast.error(actionErrorMessage(error))
+                  throw error
+                }
+              })
+              return
+            }
+
+            if (source === "personal" && meal) {
               startTransition(async () => {
                 setSlotsOptimistic({
                   date: picker.date,

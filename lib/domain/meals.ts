@@ -1,20 +1,31 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/lib/database.types"
 import { displayName, normalizeName } from "@/lib/ingredients"
+import { cleanIngredientName, extractIngredientQuantity } from "@/lib/ai/recipe-extractor"
 
 type Client = SupabaseClient<Database>
 
 export type MealOrigin = "user" | "ai"
 
+export type MealIngredientItem = {
+  id: string
+  name: string
+  quantity?: string | null
+}
+
 export type MealWithIngredients = {
   id: string
   name: string
   origin: MealOrigin
-  ingredients: { id: string; name: string }[]
+  ingredients: MealIngredientItem[]
   familyId?: string | null
   createdByUserId?: string | null
   createdByName?: string | null
 }
+
+export type UpsertMealIngredientInput =
+  | string
+  | { name: string; quantity?: string | null }
 
 export type MealScope =
   | { type: "personal"; userId: string }
@@ -32,6 +43,7 @@ export function knownFromMeals(meals: MealWithIngredients[]) {
 
 type MealIngredientRow = {
   position: number
+  quantity?: string | null
   ingredient: { id: string; name: string } | { id: string; name: string }[] | null
 }
 
@@ -52,12 +64,17 @@ function mapMeal(
   memberNamesById?: Map<string, string>
 ): MealWithIngredients {
   const origin: MealOrigin = row.origin === "ai" ? "ai" : "user"
-  const ingredients = (row.meal_ingredients ?? [])
-    .slice()
-    .sort((a, b) => a.position - b.position)
-    .map((item) => asOne(item.ingredient))
-    .filter((item): item is { id: string; name: string } => Boolean(item))
-
+  const ingredients: MealIngredientItem[] = []
+  for (const item of (row.meal_ingredients ?? []).slice().sort((a, b) => a.position - b.position)) {
+    const ing = asOne(item.ingredient)
+    if (ing) {
+      ingredients.push({
+        id: ing.id,
+        name: ing.name,
+        quantity: item.quantity ?? null,
+      })
+    }
+  }
   return {
     id: row.id,
     name: row.name,
@@ -72,6 +89,22 @@ function mapMeal(
 }
 
 const MEAL_SELECT = `
+  id,
+  name,
+  origin,
+  family_id,
+  created_by_user_id,
+  meal_ingredients (
+    position,
+    quantity,
+    ingredient:ingredients (
+      id,
+      name
+    )
+  )
+`
+
+const MEAL_SELECT_LEGACY = `
   id,
   name,
   origin,
@@ -148,7 +181,18 @@ export async function listMeals(
     query = query.eq("user_id", scope.userId).is("family_id", null)
   }
 
-  const { data, error } = await query
+  let { data, error } = await query
+  if (error && /column.*quantity/i.test(error.message)) {
+    let legacyQuery = supabase.from("meals").select(MEAL_SELECT_LEGACY)
+    if (scope.type === "family") {
+      legacyQuery = legacyQuery.eq("family_id", scope.familyId)
+    } else {
+      legacyQuery = legacyQuery.eq("user_id", scope.userId).is("family_id", null)
+    }
+    const res = await legacyQuery
+    data = res.data as unknown as typeof data
+    error = res.error
+  }
   if (error) throw new Error(error.message)
 
   return (data ?? [])
@@ -160,11 +204,21 @@ export async function listPersonalMeals(
   supabase: Client,
   userId: string
 ): Promise<MealWithIngredients[]> {
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("meals")
     .select(MEAL_SELECT)
     .eq("user_id", userId)
     .is("family_id", null)
+
+  if (error && /column.*quantity/i.test(error.message)) {
+    const res = await supabase
+      .from("meals")
+      .select(MEAL_SELECT_LEGACY)
+      .eq("user_id", userId)
+      .is("family_id", null)
+    data = res.data as unknown as typeof data
+    error = res.error
+  }
 
   if (error) throw new Error(error.message)
 
@@ -194,22 +248,50 @@ export async function getMeal(
     query = query.eq("user_id", scope.userId).is("family_id", null)
   }
 
-  const { data, error } = await query.maybeSingle()
+  let { data, error } = await query.maybeSingle()
+  if (error && /column.*quantity/i.test(error.message)) {
+    let legacyQuery = supabase.from("meals").select(MEAL_SELECT_LEGACY).eq("id", id)
+    if (scope.type === "family") {
+      legacyQuery = legacyQuery.eq("family_id", scope.familyId)
+    } else {
+      legacyQuery = legacyQuery.eq("user_id", scope.userId).is("family_id", null)
+    }
+    const res = await legacyQuery.maybeSingle()
+    data = res.data as unknown as typeof data
+    error = res.error
+  }
   if (error) throw new Error(error.message)
   return data ? mapMeal(data, memberNamesById) : null
 }
 
-function uniqueIngredientNames(names: string[]): string[] {
+function normalizeIngredientInputs(
+  inputs: UpsertMealIngredientInput[]
+): { name: string; quantity: string | null }[] {
   const seen = new Set<string>()
-  const result: string[] = []
-  for (const raw of names) {
-    const shown = displayName(raw)
+  const result: { name: string; quantity: string | null }[] = []
+
+  for (const item of inputs) {
+    let rawName: string
+    let rawQuantity: string | null = null
+
+    if (typeof item === "string") {
+      const cleaned = cleanIngredientName(item)
+      rawName = cleaned || item
+      rawQuantity = extractIngredientQuantity(item) ?? null
+    } else {
+      rawName = item.name
+      rawQuantity = item.quantity?.trim() || null
+    }
+
+    const shown = displayName(rawName)
     const normalized = normalizeName(shown)
-    if (!normalized) continue
-    if (normalized.length > 80) continue
+    if (!normalized || normalized.length > 80) continue
     if (seen.has(normalized)) continue
     seen.add(normalized)
-    result.push(shown.slice(0, 80))
+    result.push({
+      name: shown.slice(0, 80),
+      quantity: rawQuantity ? rawQuantity.slice(0, 40) : null,
+    })
   }
   return result
 }
@@ -218,9 +300,10 @@ async function replaceMealIngredients(
   supabase: Client,
   scope: MealScope,
   mealId: string,
-  ingredientNames: string[]
+  ingredientInputs: UpsertMealIngredientInput[]
 ) {
-  const names = uniqueIngredientNames(ingredientNames)
+  const items = normalizeIngredientInputs(ingredientInputs)
+  const names = items.map((i) => i.name)
 
   const { error: deleteError } = await supabase
     .from("meal_ingredients")
@@ -282,8 +365,8 @@ async function replaceMealIngredients(
     (allIngs ?? []).map((row) => [row.name_normalized, row.id])
   )
 
-  const links = names.map((name, position) => {
-    const ingredientId = byNorm.get(normalizeName(name))
+  const links = items.map((item, position) => {
+    const ingredientId = byNorm.get(normalizeName(item.name))
     if (!ingredientId) {
       throw new Error("INGREDIENT_MISSING")
     }
@@ -291,12 +374,21 @@ async function replaceMealIngredients(
       meal_id: mealId,
       ingredient_id: ingredientId,
       position,
+      quantity: item.quantity,
     }
   })
 
-  const { error: linkError } = await supabase
+  let { error: linkError } = await supabase
     .from("meal_ingredients")
     .insert(links)
+  if (linkError && /column.*quantity/i.test(linkError.message)) {
+    const fallbackLinks = links.map(({ quantity: _qty, ...rest }) => {
+      void _qty
+      return rest
+    })
+    const res = await supabase.from("meal_ingredients").insert(fallbackLinks)
+    linkError = res.error
+  }
   if (linkError) throw new Error(linkError.message)
 }
 
@@ -306,7 +398,7 @@ export async function upsertMeal(
   input: {
     id?: string
     name: string
-    ingredientNames: string[]
+    ingredientNames: UpsertMealIngredientInput[]
     origin?: MealOrigin
   }
 ): Promise<MealWithIngredients> {
@@ -392,10 +484,13 @@ export async function copyMeal(
     targetScope.type
   )
 
-  const ingredientNames = sourceMeal.ingredients.map((i) => i.name)
+  const ingredientInputs = sourceMeal.ingredients.map((i) => ({
+    name: i.name,
+    quantity: i.quantity ?? null,
+  }))
   return upsertMeal(supabase, targetScope, {
     name: newName,
-    ingredientNames,
+    ingredientNames: ingredientInputs,
     origin: sourceMeal.origin,
   })
 }

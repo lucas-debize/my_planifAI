@@ -7,7 +7,12 @@ import {
   type SlotScope,
   type WeekSlot,
 } from "@/lib/domain/slots"
-import { copyMeal, type MealScope, type MealWithIngredients } from "@/lib/domain/meals"
+import {
+  copyMeal,
+  upsertMeal as upsertMealDomain,
+  type MealScope,
+  type MealWithIngredients,
+} from "@/lib/domain/meals"
 import type { SlotKind } from "@/lib/week"
 import { requireScopedContext, revalidateApp } from "@/lib/actions/session"
 import { getCurrentIdentity } from "@/lib/accounts/identity"
@@ -95,4 +100,93 @@ export async function assignPersonalMealToSlot(input: {
       ingredients: [],
     },
   }
+}
+
+/**
+ * Assigns a family meal to a personal slot:
+ * Automatically imports the recipe into the user's personal catalog
+ * and assigns the new personal meal to the slot.
+ */
+export async function assignFamilyMealToSlot(input: {
+  date: string
+  kind: SlotKind
+  mealId: string
+}): Promise<{ meal: MealWithIngredients }> {
+  const { supabase, authUid, scope } = await requireScopedContext()
+
+  if (scope.type === "personal") {
+    const identity = await getCurrentIdentity()
+    const authorName = identity?.name || identity?.email || "Membre"
+
+    const targetScope: MealScope = {
+      type: "personal",
+      userId: authUid,
+    }
+
+    const personalMeal = await copyMeal(supabase, input.mealId, targetScope, authorName)
+    await setSlotDomain(
+      supabase,
+      { type: "personal", userId: authUid },
+      {
+        date: input.date,
+        kind: input.kind,
+        mealId: personalMeal.id,
+      }
+    )
+    revalidateApp()
+    return { meal: personalMeal }
+  }
+
+  // Family mode
+  await setSlotDomain(
+    supabase,
+    toSlotScope(scope, authUid),
+    {
+      date: input.date,
+      kind: input.kind,
+      mealId: input.mealId,
+    }
+  )
+  revalidateApp()
+  return {
+    meal: {
+      id: input.mealId,
+      name: "",
+      origin: "user",
+      ingredients: [],
+    },
+  }
+}
+
+/**
+ * Creates or reuses a "Reste" meal with 0 ingredients and assigns it to a slot.
+ * Prevents any extra ingredients from being added to the shopping list.
+ */
+export async function assignResteToSlot(input: {
+  date: string
+  kind: SlotKind
+  name: string
+}): Promise<{ meal: MealWithIngredients }> {
+  const { supabase, authUid, scope } = await requireScopedContext()
+  const slotScope = toSlotScope(scope, authUid)
+  const mealScope: MealScope =
+    scope.type === "family" && scope.familyId
+      ? { type: "family", familyId: scope.familyId, userId: authUid }
+      : { type: "personal", userId: authUid }
+
+  const cleanName = input.name.trim() || "Reste de repas"
+  const resteMeal = await upsertMealDomain(supabase, mealScope, {
+    name: cleanName,
+    ingredientNames: [],
+    origin: "user",
+  })
+
+  await setSlotDomain(supabase, slotScope, {
+    date: input.date,
+    kind: input.kind,
+    mealId: resteMeal.id,
+  })
+
+  revalidateApp()
+  return { meal: resteMeal }
 }

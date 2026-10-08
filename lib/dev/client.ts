@@ -89,6 +89,7 @@ function expand(store: DevStore, table: TableName, row: Row, spec: string): Row 
         )
         return {
           position: link.position,
+          quantity: link.quantity ?? null,
           ingredient: ingredient
             ? { id: ingredient.id, name: ingredient.name }
             : null,

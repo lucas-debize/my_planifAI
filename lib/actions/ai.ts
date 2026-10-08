@@ -1,10 +1,157 @@
 "use server"
 
+import Tesseract from "tesseract.js"
 import {
   extractRecipeFromHtml,
   extractRecipeFromText,
   type ExtractedRecipe,
 } from "@/lib/ai/recipe-extractor"
+
+export type ExtractedImageResult = {
+  transcribedText: string
+  recipe: ExtractedRecipe
+}
+
+async function transcribeImage(
+  buffer: Buffer,
+  mimeType: string
+): Promise<string> {
+  // 1. Mode Gemini Vision si configuré
+  const geminiKey = process.env.GEMINI_API_KEY
+  if (geminiKey) {
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  {
+                    inlineData: {
+                      mimeType,
+                      data: buffer.toString("base64"),
+                    },
+                  },
+                  {
+                    text:
+                      "Tu es un assistant culinaire. Retranscris fidèlement le titre de la recette et la liste exacte des ingrédients avec leurs quantités (ex: 200g de farine, 3 oeufs, 1 c. à soupe d'huile) à partir de cette photo. Écris uniquement en texte brut au format :\n[Titre de la recette]\nIngrédients :\n- [quantité] [nom]\n...",
+                  },
+                ],
+              },
+            ],
+          }),
+          signal: AbortSignal.timeout(15000),
+        }
+      )
+
+      if (response.ok) {
+        const data = await response.json()
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text
+        if (typeof text === "string" && text.trim().length > 0) {
+          return text.trim()
+        }
+      }
+    } catch {
+      // En cas d'erreur de clé ou réseau Gemini, repli vers OpenAI ou Tesseract
+    }
+  }
+
+  // 2. Mode OpenAI Vision si configuré
+  const openaiKey = process.env.OPENAI_API_KEY
+  if (openaiKey) {
+    try {
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${openaiKey}`,
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text:
+                    "Tu es un assistant culinaire. Retranscris fidèlement le titre de la recette et la liste des ingrédients avec quantités à partir de cette photo. Format :\n[Titre de la recette]\nIngrédients :\n- [quantité] [nom]\n...",
+                },
+                {
+                  type: "image_url",
+                  image_url: {
+                    url: `data:${mimeType};base64,${buffer.toString("base64")}`,
+                  },
+                },
+              ],
+            },
+          ],
+          max_tokens: 800,
+        }),
+        signal: AbortSignal.timeout(15000),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        const text = data?.choices?.[0]?.message?.content
+        if (typeof text === "string" && text.trim().length > 0) {
+          return text.trim()
+        }
+      }
+    } catch {
+      // Repli vers Tesseract
+    }
+  }
+
+  // 3. Mode OCR local (Tesseract.js) sans configuration
+  const result = await Tesseract.recognize(buffer, "fra")
+  return result.data.text.trim()
+}
+
+export async function extractRecipeFromImageAction(
+  formData: FormData
+): Promise<ExtractedImageResult> {
+  const file = formData.get("image")
+  if (!file || !(file instanceof File)) {
+    throw new Error("Veuillez sélectionner ou prendre une photo de recette.")
+  }
+
+  if (file.size > 12 * 1024 * 1024) {
+    throw new Error("L'image est trop volumineuse (maximum 12 Mo).")
+  }
+
+  const arrayBuffer = await file.arrayBuffer()
+  const buffer = Buffer.from(arrayBuffer)
+  const mimeType = file.type || "image/jpeg"
+
+  let transcribedText: string
+  try {
+    transcribedText = await transcribeImage(buffer, mimeType)
+  } catch (err) {
+    throw new Error(
+      err instanceof Error
+        ? `Erreur lors de la lecture de l'image : ${err.message}`
+        : "Impossible de lire le texte sur cette photo."
+    )
+  }
+
+  if (!transcribedText || transcribedText.length < 5) {
+    throw new Error(
+      "Aucun texte n'a pu être déchiffré sur cette image. Vérifiez la netteté et l'éclairage de la photo."
+    )
+  }
+
+  const recipe = extractRecipeFromText(transcribedText)
+  recipe.source = "image"
+
+  return {
+    transcribedText,
+    recipe,
+  }
+}
 
 export async function extractRecipeAction(input: {
   mode: "text" | "url"
