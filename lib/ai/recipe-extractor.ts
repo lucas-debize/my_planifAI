@@ -1,4 +1,5 @@
 import { displayName, normalizeName } from "@/lib/ingredients"
+import { STAPLE_MEALS } from "@/lib/ai/auto-planner"
 
 export type ExtractedIngredient = {
   name: string
@@ -10,6 +11,13 @@ export type ExtractedRecipe = {
   title: string
   ingredients: string[]
   detailedIngredients: ExtractedIngredient[]
+  source?: "url" | "text" | "json-ld" | "image"
+  isDefaultRecipe?: boolean
+}
+
+export type ExtractedMealBatch = {
+  kind: "single" | "list"
+  meals: ExtractedRecipe[]
   source?: "url" | "text" | "json-ld" | "image"
 }
 
@@ -116,16 +124,539 @@ export function cleanIngredientName(raw: string): string {
 }
 
 /**
- * Extrait le titre et les ingrédients d'un texte libre de recette.
+ * Quantité usuelle par défaut selon le type d'ingrédient.
  */
-export function extractRecipeFromText(rawText: string): ExtractedRecipe {
+function getTypicalQuantity(norm: string): string {
+  if (
+    norm.includes("lasagne") ||
+    norm.includes("pates") ||
+    norm.includes("spaghetti") ||
+    norm.includes("coquillette") ||
+    norm.includes("tagliatelle") ||
+    norm.includes("nouille")
+  ) {
+    return "400g"
+  }
+  if (
+    norm.includes("riz") ||
+    norm.includes("semoule") ||
+    norm.includes("lentille") ||
+    norm.includes("quinoa") ||
+    norm.includes("feculent")
+  ) {
+    return "300g"
+  }
+  if (norm.includes("boeuf hache") || norm.includes("viande hachee")) return "400g"
+  if (norm.includes("steak hache")) return "2"
+  if (
+    norm.includes("poulet") ||
+    norm.includes("dinde") ||
+    norm.includes("porc") ||
+    norm.includes("veau") ||
+    norm.includes("saumon") ||
+    norm.includes("cabillaud") ||
+    norm.includes("colin") ||
+    norm.includes("poisson") ||
+    norm.includes("crevette")
+  ) {
+    return "400g"
+  }
+  if (norm.includes("lardon") || norm.includes("jambon")) return "150g"
+  if (
+    norm.includes("pate brisee") ||
+    norm.includes("pate feuilletee") ||
+    norm.includes("pate a pizza") ||
+    norm.includes("salade") ||
+    norm.includes("laitue")
+  ) {
+    return "1"
+  }
+  if (norm.includes("oeuf")) return "3"
+  if (norm.includes("creme") || norm.includes("lait de coco")) return "20cl"
+  if (norm.includes("sauce tomate") || norm.includes("coulis de tomate")) return "300g"
+  if (norm.includes("lait")) return "25cl"
+  if (norm.includes("beurre")) return "25g"
+  if (
+    norm.includes("fromage") ||
+    norm.includes("emmental") ||
+    norm.includes("mozzarella") ||
+    norm.includes("parmesan") ||
+    norm.includes("chevre") ||
+    norm.includes("feta") ||
+    norm.includes("cheddar")
+  ) {
+    return "100g"
+  }
+  if (norm.includes("pomme de terre") || norm.includes("legume")) return "400g"
+  if (
+    norm.includes("carotte") ||
+    norm.includes("poireau") ||
+    norm.includes("tomate") ||
+    norm.includes("courgette") ||
+    norm.includes("aubergine") ||
+    norm.includes("poivron")
+  ) {
+    return "2"
+  }
+  if (norm.includes("oignon")) return "1"
+  if (norm.includes("ail")) return "1 gousse"
+  if (
+    norm.includes("huile") ||
+    norm.includes("vinaigre") ||
+    norm.includes("vinaigrette") ||
+    norm.includes("sauce soja") ||
+    norm.includes("moutarde") ||
+    norm.includes("miel")
+  ) {
+    return "2 c. à soupe"
+  }
+  if (norm.includes("pain")) return "4 tranches"
+  return "200g"
+}
+
+function toExtractedIngredient(name: string, quantity?: string): ExtractedIngredient {
+  const norm = normalizeName(name)
+  const qty = quantity ?? getTypicalQuantity(norm)
+  const dName = displayName(name)
+  return {
+    name: dName,
+    quantity: qty,
+    raw: qty ? `${qty} ${dName}` : dName,
+  }
+}
+
+const CLASSIC_DISH_RECIPES: {
+  keywords: string[]
+  ingredients: { name: string; quantity?: string }[]
+}[] = [
+  {
+    keywords: ["lasagne"],
+    ingredients: [
+      { name: "Pâtes à lasagnes", quantity: "300g" },
+      { name: "Boeuf haché", quantity: "400g" },
+      { name: "Sauce tomate", quantity: "400g" },
+      { name: "Oignon", quantity: "1" },
+      { name: "Emmental râpé", quantity: "100g" },
+    ],
+  },
+  {
+    keywords: ["quiche lorraine"],
+    ingredients: [
+      { name: "Pâte brisée", quantity: "1" },
+      { name: "Lardons", quantity: "200g" },
+      { name: "Oeufs", quantity: "3" },
+      { name: "Crème fraîche", quantity: "20cl" },
+    ],
+  },
+  {
+    keywords: ["steak hache pure", "steak pure", "steak hache et pure"],
+    ingredients: [
+      { name: "Steak haché", quantity: "2" },
+      { name: "Pommes de terre", quantity: "500g" },
+      { name: "Lait", quantity: "20cl" },
+      { name: "Beurre", quantity: "30g" },
+      { name: "Salade verte", quantity: "1" },
+    ],
+  },
+  {
+    keywords: ["pates au pesto", "pate au pesto"],
+    ingredients: [
+      { name: "Pâtes", quantity: "400g" },
+      { name: "Pesto", quantity: "1 pot" },
+      { name: "Tomates cerises", quantity: "200g" },
+      { name: "Parmesan", quantity: "50g" },
+    ],
+  },
+  {
+    keywords: ["poulet roti"],
+    ingredients: [
+      { name: "Poulet", quantity: "1" },
+      { name: "Pommes de terre", quantity: "400g" },
+      { name: "Haricots verts", quantity: "300g" },
+      { name: "Ail", quantity: "2 gousses" },
+      { name: "Beurre", quantity: "30g" },
+    ],
+  },
+  {
+    keywords: ["chevre chaud"],
+    ingredients: [
+      { name: "Fromage de chèvre", quantity: "150g" },
+      { name: "Salade", quantity: "1" },
+      { name: "Pain complet", quantity: "4 tranches" },
+      { name: "Noix", quantity: "50g" },
+      { name: "Miel", quantity: "2 c. à soupe" },
+      { name: "Huile d'olive", quantity: "2 c. à soupe" },
+    ],
+  },
+  {
+    keywords: ["pizza"],
+    ingredients: [
+      { name: "Pâte à pizza", quantity: "1" },
+      { name: "Sauce tomate", quantity: "200g" },
+      { name: "Mozzarella", quantity: "150g" },
+      { name: "Jambon", quantity: "150g" },
+      { name: "Champignons", quantity: "100g" },
+    ],
+  },
+  {
+    keywords: ["carbonara"],
+    ingredients: [
+      { name: "Pâtes", quantity: "400g" },
+      { name: "Lardons", quantity: "200g" },
+      { name: "Oeufs", quantity: "3" },
+      { name: "Parmesan", quantity: "60g" },
+    ],
+  },
+  {
+    keywords: ["bolognaise", "bolognese"],
+    ingredients: [
+      { name: "Spaghetti", quantity: "400g" },
+      { name: "Boeuf haché", quantity: "400g" },
+      { name: "Sauce tomate", quantity: "300g" },
+      { name: "Oignon", quantity: "1" },
+      { name: "Parmesan", quantity: "50g" },
+    ],
+  },
+  {
+    keywords: ["chili con carne"],
+    ingredients: [
+      { name: "Boeuf haché", quantity: "400g" },
+      { name: "Haricots rouges", quantity: "250g" },
+      { name: "Coulis de tomate", quantity: "300g" },
+      { name: "Oignon", quantity: "1" },
+      { name: "Maïs", quantity: "150g" },
+      { name: "Riz", quantity: "200g" },
+    ],
+  },
+  {
+    keywords: ["burger"],
+    ingredients: [
+      { name: "Pains burger", quantity: "2" },
+      { name: "Steak haché", quantity: "2" },
+      { name: "Cheddar", quantity: "2 tranches" },
+      { name: "Tomates", quantity: "1" },
+      { name: "Salade", quantity: "quelques feuilles" },
+    ],
+  },
+  {
+    keywords: ["dahl", "dal"],
+    ingredients: [
+      { name: "Lentilles corail", quantity: "300g" },
+      { name: "Coulis de tomate", quantity: "200g" },
+      { name: "Lait de coco", quantity: "20cl" },
+      { name: "Curry", quantity: "1 c. à café" },
+      { name: "Riz", quantity: "200g" },
+    ],
+  },
+  {
+    keywords: ["risotto"],
+    ingredients: [
+      { name: "Riz arborio", quantity: "300g" },
+      { name: "Champignons", quantity: "250g" },
+      { name: "Parmesan", quantity: "60g" },
+      { name: "Oignon", quantity: "1" },
+      { name: "Bouillon de légumes", quantity: "1 cube" },
+    ],
+  },
+  {
+    keywords: ["gratin dauphinois"],
+    ingredients: [
+      { name: "Pommes de terre", quantity: "600g" },
+      { name: "Crème fraîche", quantity: "20cl" },
+      { name: "Lait", quantity: "20cl" },
+      { name: "Ail", quantity: "1 gousse" },
+      { name: "Muscade", quantity: "1 pincée" },
+    ],
+  },
+  {
+    keywords: ["salade nicoise"],
+    ingredients: [
+      { name: "Thon en boîte", quantity: "1 boîte" },
+      { name: "Oeufs", quantity: "2" },
+      { name: "Haricots verts", quantity: "200g" },
+      { name: "Tomates", quantity: "2" },
+      { name: "Pommes de terre", quantity: "200g" },
+      { name: "Olives", quantity: "50g" },
+    ],
+  },
+  {
+    keywords: ["salade cesar"],
+    ingredients: [
+      { name: "Poulet", quantity: "300g" },
+      { name: "Laitue", quantity: "1" },
+      { name: "Parmesan", quantity: "50g" },
+      { name: "Croûtons", quantity: "50g" },
+      { name: "Oeufs", quantity: "2" },
+    ],
+  },
+  {
+    keywords: ["croque monsieur"],
+    ingredients: [
+      { name: "Pain de mie", quantity: "8 tranches" },
+      { name: "Jambon", quantity: "4 tranches" },
+      { name: "Emmental râpé", quantity: "100g" },
+      { name: "Beurre", quantity: "30g" },
+    ],
+  },
+  {
+    keywords: ["ratatouille"],
+    ingredients: [
+      { name: "Courgettes", quantity: "2" },
+      { name: "Aubergines", quantity: "1" },
+      { name: "Poivrons", quantity: "2" },
+      { name: "Tomates", quantity: "3" },
+      { name: "Oignon", quantity: "1" },
+      { name: "Huile d'olive", quantity: "2 c. à soupe" },
+    ],
+  },
+  {
+    keywords: ["soupe de legumes", "veloute de legumes", "potage de legumes"],
+    ingredients: [
+      { name: "Carottes", quantity: "3" },
+      { name: "Poireaux", quantity: "2" },
+      { name: "Pommes de terre", quantity: "2" },
+      { name: "Courgettes", quantity: "1" },
+      { name: "Bouillon de légumes", quantity: "1 cube" },
+    ],
+  },
+]
+
+const CULINARY_FAMILIES: {
+  family: string
+  keywords: string[]
+  ingredients: { name: string; quantity: string }[]
+}[] = [
+  {
+    family: "wok",
+    keywords: ["wok", "saute asiatique"],
+    ingredients: [
+      { name: "Nouilles", quantity: "300g" },
+      { name: "Légumes croquants", quantity: "300g" },
+      { name: "Sauce soja", quantity: "2 c. à soupe" },
+      { name: "Ail", quantity: "1 gousse" },
+      { name: "Huile de sésame", quantity: "1 c. à soupe" },
+    ],
+  },
+  {
+    family: "curry",
+    keywords: ["curry", "colombo", "massale"],
+    ingredients: [
+      { name: "Poulet ou Protéine", quantity: "350g" },
+      { name: "Riz basmati", quantity: "300g" },
+      { name: "Lait de coco", quantity: "20cl" },
+      { name: "Poudre de curry", quantity: "1 c. à café" },
+      { name: "Oignon", quantity: "1" },
+    ],
+  },
+  {
+    family: "pates",
+    keywords: ["pate", "spaghetti", "coquillette", "penne", "tagliatelle", "macaroni"],
+    ingredients: [
+      { name: "Pâtes", quantity: "400g" },
+      { name: "Sauce tomate", quantity: "200g" },
+      { name: "Parmesan", quantity: "50g" },
+      { name: "Oignon", quantity: "1" },
+      { name: "Huile d'olive", quantity: "1 c. à soupe" },
+    ],
+  },
+  {
+    family: "riz",
+    keywords: ["riz"],
+    ingredients: [
+      { name: "Riz", quantity: "300g" },
+      { name: "Légumes variés", quantity: "300g" },
+      { name: "Oignon", quantity: "1" },
+      { name: "Huile d'olive", quantity: "1 c. à soupe" },
+    ],
+  },
+  {
+    family: "salade",
+    keywords: ["salade"],
+    ingredients: [
+      { name: "Salade verte", quantity: "1" },
+      { name: "Tomates", quantity: "2" },
+      { name: "Concombre", quantity: "1" },
+      { name: "Vinaigrette", quantity: "2 c. à soupe" },
+    ],
+  },
+  {
+    family: "soupe",
+    keywords: ["soupe", "veloute", "potage", "bouillon"],
+    ingredients: [
+      { name: "Carottes", quantity: "3" },
+      { name: "Poireaux", quantity: "2" },
+      { name: "Pommes de terre", quantity: "2" },
+      { name: "Crème fraîche", quantity: "10cl" },
+    ],
+  },
+  {
+    family: "tarte_quiche",
+    keywords: ["quiche", "tarte", "tourte"],
+    ingredients: [
+      { name: "Pâte brisée", quantity: "1" },
+      { name: "Oeufs", quantity: "3" },
+      { name: "Crème fraîche", quantity: "20cl" },
+      { name: "Emmental râpé", quantity: "100g" },
+    ],
+  },
+  {
+    family: "gratin",
+    keywords: ["gratin"],
+    ingredients: [
+      { name: "Pommes de terre", quantity: "600g" },
+      { name: "Crème fraîche", quantity: "20cl" },
+      { name: "Emmental râpé", quantity: "100g" },
+      { name: "Ail", quantity: "1 gousse" },
+    ],
+  },
+  {
+    family: "pizza",
+    keywords: ["pizza"],
+    ingredients: [
+      { name: "Pâte à pizza", quantity: "1" },
+      { name: "Sauce tomate", quantity: "200g" },
+      { name: "Mozzarella", quantity: "150g" },
+      { name: "Origan", quantity: "1 pincée" },
+    ],
+  },
+  {
+    family: "burger",
+    keywords: ["burger"],
+    ingredients: [
+      { name: "Pains burger", quantity: "2" },
+      { name: "Steak haché", quantity: "2" },
+      { name: "Cheddar", quantity: "2 tranches" },
+      { name: "Tomates", quantity: "1" },
+    ],
+  },
+  {
+    family: "poisson",
+    keywords: ["saumon", "cabillaud", "colin", "poisson", "thon", "crevette"],
+    ingredients: [
+      { name: "Filet de poisson", quantity: "400g" },
+      { name: "Riz", quantity: "250g" },
+      { name: "Courgettes", quantity: "2" },
+      { name: "Citron", quantity: "1" },
+      { name: "Huile d'olive", quantity: "1 c. à soupe" },
+    ],
+  },
+  {
+    family: "volaille",
+    keywords: ["poulet", "dinde", "volaille"],
+    ingredients: [
+      { name: "Filets de volaille", quantity: "400g" },
+      { name: "Pommes de terre", quantity: "400g" },
+      { name: "Haricots verts", quantity: "300g" },
+      { name: "Beurre", quantity: "20g" },
+    ],
+  },
+  {
+    family: "viande",
+    keywords: ["boeuf", "steak", "porc", "viande", "veau"],
+    ingredients: [
+      { name: "Viande", quantity: "400g" },
+      { name: "Féculent", quantity: "300g" },
+      { name: "Légumes", quantity: "200g" },
+      { name: "Oignon", quantity: "1" },
+    ],
+  },
+  {
+    family: "oeufs",
+    keywords: ["oeuf", "omelette"],
+    ingredients: [
+      { name: "Oeufs", quantity: "4" },
+      { name: "Beurre", quantity: "20g" },
+      { name: "Salade verte", quantity: "1" },
+      { name: "Pain", quantity: "quelques tranches" },
+    ],
+  },
+  {
+    family: "wrap",
+    keywords: ["wrap", "fajita", "burrito", "taco"],
+    ingredients: [
+      { name: "Galettes wrap", quantity: "4" },
+      { name: "Poulet", quantity: "200g" },
+      { name: "Tomates", quantity: "2" },
+      { name: "Salade", quantity: "quelques feuilles" },
+      { name: "Sauce au yaourt", quantity: "4 c. à soupe" },
+    ],
+  },
+]
+
+/**
+ * Génère une recette par défaut équilibrée pour un nom de plat donné.
+ */
+export function getDefaultRecipeForDish(dishName: string): ExtractedIngredient[] {
+  const norm = normalizeName(dishName)
+  if (!norm) return []
+
+  // 1. Recherche dans les recettes classiques précises
+  for (const classic of CLASSIC_DISH_RECIPES) {
+    if (classic.keywords.some((kw) => norm.includes(kw))) {
+      return classic.ingredients.map((ing) => toExtractedIngredient(ing.name, ing.quantity))
+    }
+  }
+
+  // 2. Recherche par correspondance dans STAPLE_MEALS (auto-planner)
+  for (const staple of STAPLE_MEALS) {
+    const stapleNorm = normalizeName(staple.name)
+    if (norm.includes(stapleNorm) || stapleNorm.includes(norm)) {
+      return staple.ingredients.map((ing) => toExtractedIngredient(ing))
+    }
+  }
+
+  // 3. Recherche par famille culinaire lexicale
+  for (const fam of CULINARY_FAMILIES) {
+    if (fam.keywords.some((kw) => norm.includes(kw))) {
+      return fam.ingredients.map((ing) => toExtractedIngredient(ing.name, ing.quantity))
+    }
+  }
+
+  // 4. Base équilibrée par défaut
+  return [
+    toExtractedIngredient("Protéine au choix", "350g"),
+    toExtractedIngredient("Féculent (riz ou pâtes)", "300g"),
+    toExtractedIngredient("Légumes de saison", "300g"),
+    toExtractedIngredient("Huile d'olive", "2 c. à soupe"),
+  ]
+}
+
+/**
+ * Nettoie le nom d'un plat extrait d'un planning ou d'une liste.
+ */
+export function cleanDishName(rawName: string): string {
+  let s = rawName.trim()
+  s = s.replace(
+    /^(?:[-*•+–—\s\d.)\]]*)(?:(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)(?:\s+(?:midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter))?|(?:midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter))\s*[:\-–—.]\s*/i,
+    ""
+  )
+  s = s.replace(/^(?:midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter)\s*[:\-–—.]\s*/i, "")
+  s = s.replace(/^[-*•+–—\s\d.)\]]+/, "")
+  s = s.replace(/\s*\((?:midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter|reste|rapide)\)\s*$/i, "")
+  s = s.replace(/[.:;!]+$/, "").trim()
+  return displayName(s)
+}
+
+const HEADER_LINE_REGEX =
+  /^(?:planning|menu|programme|repas|id[eé]es?\s+de\s+repas|semaine|liste\s+de\s+plats?)(?:\s+(?:de\s+la\s+semaine|semaine|\d+))?\s*:?$/i
+
+const DAY_PREFIX_LINE_REGEX =
+  /^(?:[-*•+–—\s\d.)\]]*)(?:(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)(?:\s+(?:midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter))?|(?:midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter))\s*[:\-–—.]\s*(.+)$/i
+
+const PLAT_MARKER_REGEX =
+  /^(?:={2,}\s*)?PLAT\s*:\s*([^\n=]+?)(?:\s*={2,})?$/i
+
+function parseSingleRecipe(
+  rawText: string,
+  source?: "url" | "text" | "json-ld" | "image"
+): ExtractedRecipe {
   const lines = rawText
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter(Boolean)
 
   if (lines.length === 0) {
-    return { title: "", ingredients: [], detailedIngredients: [] }
+    return { title: "", ingredients: [], detailedIngredients: [], source: source ?? "text" }
   }
 
   // 1. Recherche du titre
@@ -236,10 +767,216 @@ export function extractRecipeFromText(rawText: string): ExtractedRecipe {
     title: title ? displayName(title) : "Nouvelle recette",
     ingredients: cleaned,
     detailedIngredients,
-    source: "text",
+    source: source ?? "text",
   }
 }
 
+/**
+ * Détecte si le texte représente une recette unique ou une liste/planning de plats,
+ * et extrait chaque plat avec ses ingrédients réels ou par défaut.
+ */
+export function extractMealsFromText(
+  rawText: string,
+  source?: "url" | "text" | "json-ld" | "image"
+): ExtractedMealBatch {
+  const trimmed = rawText.trim()
+  if (!trimmed) {
+    return {
+      kind: "single",
+      meals: [{ title: "", ingredients: [], detailedIngredients: [], source: source ?? "text" }],
+      source: source ?? "text",
+    }
+  }
+
+  const lines = rawText.split(/\r?\n/)
+
+  // Heuristique 1 : Marqueurs multi-plats explicites (=== PLAT : [Nom] === ou PLAT : [Nom])
+  const platMarkerCount = lines.filter((l) => PLAT_MARKER_REGEX.test(l.trim())).length
+  if (platMarkerCount > 0) {
+    const mealBlocks: { title: string; lines: string[] }[] = []
+    let currentBlock: { title: string; lines: string[] } | null = null
+
+    for (const line of lines) {
+      const m = line.trim().match(PLAT_MARKER_REGEX)
+      if (m) {
+        if (currentBlock) mealBlocks.push(currentBlock)
+        currentBlock = { title: cleanDishName(m[1]), lines: [] }
+      } else if (currentBlock) {
+        currentBlock.lines.push(line)
+      }
+    }
+    if (currentBlock) mealBlocks.push(currentBlock)
+
+    if (mealBlocks.length > 0) {
+      const meals: ExtractedRecipe[] = []
+      const seenTitles = new Set<string>()
+
+      for (const block of mealBlocks) {
+        const norm = normalizeName(block.title)
+        if (!norm || seenTitles.has(norm)) continue
+        seenTitles.add(norm)
+
+        const blockText = block.lines.join("\n").trim()
+        const parsed = blockText ? parseSingleRecipe(blockText, source) : null
+        if (parsed && parsed.detailedIngredients.length > 0) {
+          meals.push({
+            title: block.title,
+            ingredients: parsed.ingredients,
+            detailedIngredients: parsed.detailedIngredients,
+            isDefaultRecipe: false,
+            source: source ?? "text",
+          })
+        } else {
+          const defaultIngs = getDefaultRecipeForDish(block.title)
+          meals.push({
+            title: block.title,
+            ingredients: defaultIngs.map((i) => i.name),
+            detailedIngredients: defaultIngs,
+            isDefaultRecipe: true,
+            source: source ?? "text",
+          })
+        }
+      }
+
+      if (meals.length > 0) {
+        return {
+          kind: meals.length > 1 ? "list" : "single",
+          meals,
+          source: source ?? "text",
+        }
+      }
+    }
+  }
+
+  // Heuristique 2 : Lignes commençant par des jours de la semaine ou créneaux
+  const dayLinesCount = lines.filter((l) => DAY_PREFIX_LINE_REGEX.test(l.trim())).length
+  if (dayLinesCount >= 2) {
+    const meals: ExtractedRecipe[] = []
+    const seenTitles = new Set<string>()
+
+     for (const line of lines) {
+      const trimmedLine = line.trim()
+      if (!trimmedLine || HEADER_LINE_REGEX.test(trimmedLine)) continue
+
+      const match = trimmedLine.match(DAY_PREFIX_LINE_REGEX)
+      if (match) {
+        const dishName = cleanDishName(match[2])
+        if (dishName.length < 2) continue
+        const norm = normalizeName(dishName)
+        if (seenTitles.has(norm)) continue
+        seenTitles.add(norm)
+
+        const defaultIngs = getDefaultRecipeForDish(dishName)
+        meals.push({
+          title: dishName,
+          ingredients: defaultIngs.map((i) => i.name),
+          detailedIngredients: defaultIngs,
+          isDefaultRecipe: true,
+          source: source ?? "text",
+        })
+      }
+    }
+
+    if (meals.length > 0) {
+      return {
+        kind: meals.length > 1 ? "list" : "single",
+        meals,
+        source: source ?? "text",
+      }
+    }
+  }
+
+  // Heuristique 3 : Liste à puces ou numérotée de plats sans en-tête d'ingrédients
+  const hasIngredientHeader = lines.some((l) => /^ingr[eé]dients?\b/i.test(l.trim()))
+  if (!hasIngredientHeader) {
+    const nonInstructionLines = lines.filter((l) => {
+      const t = l.trim()
+      if (!t || HEADER_LINE_REGEX.test(t)) return false
+      if (/^(pr[eé]paration|[eé]tapes?|instructions?|cuisson)\b/i.test(t)) return false
+      return t.length >= 3 && t.length <= 80 && !t.includes(". ")
+    })
+    // Vérifier si une des lignes ressemble à une liste d'ingrédients séparés par des virgules
+    const hasCommaIngredientsLine = nonInstructionLines.some((l) => {
+      if (!l.includes(",")) return false
+      const parts = l.split(",")
+      return (
+        parts.length >= 3 ||
+        parts.some((p) => extractIngredientQuantity(p.trim()) !== undefined)
+      )
+    })
+
+    const allHaveBullets =
+      nonInstructionLines.length >= 2 &&
+      nonInstructionLines.every((l) => /^[-*•+–—\d.)\]]/.test(l.trim()))
+
+    if (
+      !hasCommaIngredientsLine &&
+      (allHaveBullets || nonInstructionLines.length >= 3)
+    ) {
+      let qtyCount = 0
+      for (const line of nonInstructionLines) {
+        if (extractIngredientQuantity(line) !== undefined) {
+          qtyCount++
+        }
+      }
+
+      if (qtyCount / nonInstructionLines.length < 0.35) {
+        const meals: ExtractedRecipe[] = []
+        const seenTitles = new Set<string>()
+
+        for (const line of nonInstructionLines) {
+          const dishName = cleanDishName(line)
+          if (dishName.length < 2) continue
+          const norm = normalizeName(dishName)
+          if (seenTitles.has(norm)) continue
+          seenTitles.add(norm)
+
+          const defaultIngs = getDefaultRecipeForDish(dishName)
+          meals.push({
+            title: dishName,
+            ingredients: defaultIngs.map((i) => i.name),
+            detailedIngredients: defaultIngs,
+            isDefaultRecipe: true,
+            source: source ?? "text",
+          })
+        }
+
+        if (meals.length > 0) {
+          return {
+            kind: meals.length > 1 ? "list" : "single",
+            meals,
+            source: source ?? "text",
+          }
+        }
+      }
+    }
+  }
+
+  // Plat unique
+  const single = parseSingleRecipe(rawText, source)
+  if (single.detailedIngredients.length === 0 && single.title && single.title !== "Nouvelle recette") {
+    const defaultIngs = getDefaultRecipeForDish(single.title)
+    single.detailedIngredients = defaultIngs
+    single.ingredients = defaultIngs.map((i) => i.name)
+    single.isDefaultRecipe = true
+  } else {
+    single.isDefaultRecipe = false
+  }
+
+  return {
+    kind: "single",
+    meals: [single],
+    source: source ?? "text",
+  }
+}
+
+/**
+ * Extrait le titre et les ingrédients d'un texte libre de recette (rétrocompatibilité).
+ */
+export function extractRecipeFromText(rawText: string): ExtractedRecipe {
+  const batch = extractMealsFromText(rawText)
+  return batch.meals[0] || { title: "", ingredients: [], detailedIngredients: [], source: "text" }
+}
 /**
  * Extrait les données de recette depuis le HTML d'une page web (JSON-LD Recipe ou meta).
  */

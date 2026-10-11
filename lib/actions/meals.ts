@@ -65,6 +65,27 @@ export async function upsertMeal(input: {
   return meal
 }
 
+export async function batchCreateMealsAction(
+  meals: { name: string; ingredientNames: UpsertMealIngredientInput[] }[]
+): Promise<MealWithIngredients[]> {
+  if (meals.length === 0) return []
+  const { supabase, authUid, scope } = await requireScopedContext()
+  const mealScope = toMealScope(scope, authUid)
+
+  const createdMeals: MealWithIngredients[] = []
+  for (const item of meals) {
+    const meal = await upsertMealDomain(supabase, mealScope, {
+      name: item.name,
+      ingredientNames: item.ingredientNames,
+      origin: "ai",
+    })
+    createdMeals.push(meal)
+  }
+
+  revalidateApp()
+  return createdMeals
+}
+
 export async function deleteMeal(id: string): Promise<void> {
   const { supabase, authUid, scope } = await requireScopedContext()
   await deleteMealDomain(supabase, toMealScope(scope, authUid), id)

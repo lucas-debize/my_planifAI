@@ -5,6 +5,8 @@ import {
   parseIngredientLine,
   extractRecipeFromText,
   extractRecipeFromHtml,
+  extractMealsFromText,
+  getDefaultRecipeForDish,
 } from "@/lib/ai/recipe-extractor"
 
 describe("Import magique de recette (NLP & Extraction locale)", () => {
@@ -216,6 +218,139 @@ Pâtes tagliatelles, 150g de lardons, 3 jaunes d'oeufs, parmesan râpé
       expect(extracted.ingredients).toContain("Fraises")
       expect(extracted.ingredients).toContain("Pâte sablée")
       expect(extracted.ingredients).toContain("Crème pâtissière")
+    })
+  })
+
+  describe("getDefaultRecipeForDish", () => {
+    it("retourne une recette cohérente pour Lasagnes contenant pâtes à lasagnes, boeuf haché et sauce tomate", () => {
+      const ingredients = getDefaultRecipeForDish("Lasagnes")
+      expect(ingredients.length > 0).toBe(true)
+      const names = ingredients.map((i) => i.name.toLowerCase())
+      expect(names.some((n) => n.includes("lasagne"))).toBe(true)
+      expect(names.some((n) => n.includes("boeuf"))).toBe(true)
+      expect(names.some((n) => n.includes("tomate"))).toBe(true)
+      for (const ing of ingredients) {
+        expect(ing.quantity !== undefined).toBe(true)
+        expect(ing.raw !== undefined).toBe(true)
+      }
+    })
+
+    it("retourne une recette cohérente pour Quiche lorraine contenant pâte brisée, lardons, oeufs et crème", () => {
+      const ingredients = getDefaultRecipeForDish("Quiche lorraine")
+      expect(ingredients.length > 0).toBe(true)
+      const names = ingredients.map((i) => i.name.toLowerCase())
+      expect(names.some((n) => n.includes("pâte brisée") || n.includes("pate brisee"))).toBe(true)
+      expect(names.some((n) => n.includes("lardon"))).toBe(true)
+      expect(names.some((n) => n.includes("oeuf"))).toBe(true)
+      expect(names.some((n) => n.includes("crème") || n.includes("creme"))).toBe(true)
+    })
+
+    it("attribue une base équilibrée pour un plat inconnu (ex: Wok exotique)", () => {
+      const ingredients = getDefaultRecipeForDish("Wok exotique")
+      expect(ingredients.length >= 3).toBe(true)
+      const names = ingredients.map((i) => i.name.toLowerCase())
+      expect(names.some((n) => n.includes("nouille") || n.includes("légume") || n.includes("soja"))).toBe(true)
+    })
+  })
+
+  describe("extractMealsFromText", () => {
+    it("gère un plat unique avec recette complète intacte", () => {
+      const text = `Tarte aux poireaux
+Ingrédients :
+- 3 poireaux
+- 200g de chèvre
+- 3 oeufs
+- 20cl de crème
+- 1 pâte brisée`
+
+      const batch = extractMealsFromText(text)
+      expect(batch.kind).toBe("single")
+      expect(batch.meals.length).toBe(1)
+      const recipe = batch.meals[0]
+      expect(recipe.title).toBe("Tarte aux poireaux")
+      expect(recipe.isDefaultRecipe).toBe(false)
+      expect(recipe.detailedIngredients.length).toBe(5)
+      expect(recipe.detailedIngredients.find((i) => i.name === "Poireaux")?.quantity).toBe("3")
+      expect(recipe.detailedIngredients.find((i) => i.name === "Chèvre")?.quantity).toBe("200g")
+      expect(recipe.detailedIngredients.find((i) => i.name === "Oeufs")?.quantity).toBe("3")
+      expect(recipe.detailedIngredients.find((i) => i.name === "Crème")?.quantity).toBe("20cl")
+      expect(recipe.detailedIngredients.find((i) => i.name === "Pâte brisée")?.quantity).toBe("1")
+    })
+
+    it("détecte un planning de la semaine avec jours et associe des recettes par défaut", () => {
+      const text = `Planning de la semaine
+Lundi : Lasagnes maison
+Mardi : Salade de chèvre chaud
+Mercredi : Quiche lorraine
+Jeudi : Poulet rôti et haricots verts
+Vendredi : Pizza maison`
+
+      const batch = extractMealsFromText(text)
+      expect(batch.kind).toBe("list")
+      expect(batch.meals.length).toBe(5)
+      expect(batch.meals.map((m) => m.title)).toEqual([
+        "Lasagnes maison",
+        "Salade de chèvre chaud",
+        "Quiche lorraine",
+        "Poulet rôti et haricots verts",
+        "Pizza maison",
+      ])
+      for (const meal of batch.meals) {
+        expect(meal.isDefaultRecipe).toBe(true)
+        expect(meal.detailedIngredients.length > 0).toBe(true)
+        expect(meal.ingredients.length > 0).toBe(true)
+      }
+    })
+
+    it("détecte un planning avec créneaux midi/soir et nettoie les préfixes", () => {
+      const text = `Lundi midi : Steak haché purée
+Lundi soir : Soupe de légumes
+Mardi midi : Pâtes au pesto`
+
+      const batch = extractMealsFromText(text)
+      expect(batch.kind).toBe("list")
+      expect(batch.meals.length).toBe(3)
+      expect(batch.meals.map((m) => m.title)).toEqual([
+        "Steak haché purée",
+        "Soupe de légumes",
+        "Pâtes au pesto",
+      ])
+      for (const meal of batch.meals) {
+        expect(meal.isDefaultRecipe).toBe(true)
+        expect(meal.detailedIngredients.length > 0).toBe(true)
+      }
+    })
+
+    it("gère les marqueurs multi-plats explicites de la vision IA", () => {
+      const text = `=== PLAT : Lasagnes maison ===
+Ingrédients :
+- 300g pâtes à lasagnes
+- 400g boeuf haché
+
+=== PLAT : Quiche lorraine ===
+Ingrédients :
+- 1 pâte brisée
+- 200g lardons`
+
+      const batch = extractMealsFromText(text)
+      expect(batch.kind).toBe("list")
+      expect(batch.meals.length).toBe(2)
+      expect(batch.meals[0].title).toBe("Lasagnes maison")
+      expect(batch.meals[0].isDefaultRecipe).toBe(false)
+      expect(batch.meals[0].detailedIngredients.length).toBe(2)
+      expect(batch.meals[1].title).toBe("Quiche lorraine")
+      expect(batch.meals[1].isDefaultRecipe).toBe(false)
+      expect(batch.meals[1].detailedIngredients.length).toBe(2)
+    })
+
+    it("attribue une recette par défaut pour un plat unique sans ingrédients", () => {
+      const text = "Lasagnes maison"
+      const batch = extractMealsFromText(text)
+      expect(batch.kind).toBe("single")
+      expect(batch.meals.length).toBe(1)
+      expect(batch.meals[0].title).toBe("Lasagnes maison")
+      expect(batch.meals[0].isDefaultRecipe).toBe(true)
+      expect(batch.meals[0].detailedIngredients.length > 0).toBe(true)
     })
   })
 })

@@ -4,11 +4,14 @@ import Tesseract from "tesseract.js"
 import {
   extractRecipeFromHtml,
   extractRecipeFromText,
+  extractMealsFromText,
   type ExtractedRecipe,
+  type ExtractedMealBatch,
 } from "@/lib/ai/recipe-extractor"
 
 export type ExtractedImageResult = {
   transcribedText: string
+  result: ExtractedMealBatch
   recipe: ExtractedRecipe
 }
 
@@ -37,7 +40,7 @@ async function transcribeImage(
                   },
                   {
                     text:
-                      "Tu es un assistant culinaire. Retranscris fidèlement le titre de la recette et la liste exacte des ingrédients avec leurs quantités (ex: 200g de farine, 3 oeufs, 1 c. à soupe d'huile) à partir de cette photo. Écris uniquement en texte brut au format :\n[Titre de la recette]\nIngrédients :\n- [quantité] [nom]\n...",
+                      "Tu es un assistant culinaire expert. Analyse attentivement cette photo et identifie sa nature :\n\nCas A : La photo montre une RECETTE UNIQUE détaillée avec des ingrédients (ex: livre de cuisine, fiche recette).\n-> Retranscris fidèlement le titre exact et la TOTALITÉ des ingrédients avec leurs quantités sans rien résumer, modifier ni tronquer.\nFormat :\n[Titre de la recette]\nIngrédients :\n- [quantité] [nom]\n\nCas B : La photo montre un PLANNING DE REPAS ou une LISTE DE PLATS (ex: semainier, tableau de repas, menu).\n-> Extrais tous les plats distincts (sans inclure les jours dans le titre) sous ce format :\n=== PLAT : [Nom du plat 1] ===\nIngrédients :\n- [quantité] [nom]\n\n=== PLAT : [Nom du plat 2] ===\nIngrédients :\n- [quantité] [nom]\nPour chaque plat sans ingrédients, génère une recette par défaut équilibrée (3 à 5 ingrédients courants avec quantités).\n\nCas C : La photo montre un PLAT UNIQUE sans liste d'ingrédients.\n-> Extrais le titre et propose une recette par défaut (3 à 5 ingrédients avec quantités).\nFormat :\n[Titre]\nIngrédients :\n- [quantité] [nom]\n\nÉcris uniquement le texte au format indiqué sans bla-bla.",
                   },
                 ],
               },
@@ -78,7 +81,7 @@ async function transcribeImage(
                 {
                   type: "text",
                   text:
-                    "Tu es un assistant culinaire. Retranscris fidèlement le titre de la recette et la liste des ingrédients avec quantités à partir de cette photo. Format :\n[Titre de la recette]\nIngrédients :\n- [quantité] [nom]\n...",
+                    "Tu es un assistant culinaire expert. Analyse attentivement cette photo et identifie sa nature :\n\nCas A : RECETTE UNIQUE détaillée avec des ingrédients.\n-> Retranscris fidèlement le titre exact et la TOTALITÉ des ingrédients avec leurs quantités sans rien résumer ni modifier.\nFormat :\n[Titre de la recette]\nIngrédients :\n- [quantité] [nom]\n\nCas B : PLANNING DE REPAS ou LISTE DE PLATS.\n-> Extrais tous les plats distincts sous ce format :\n=== PLAT : [Nom du plat 1] ===\nIngrédients :\n- [quantité] [nom]\n=== PLAT : [Nom du plat 2] ===\nIngrédients :\n- [quantité] [nom]\nPour chaque plat sans ingrédients, génère une recette par défaut équilibrée (3 à 5 ingrédients avec quantités).\n\nCas C : PLAT UNIQUE sans ingrédients.\n-> Extrais le titre et génère 3 à 5 ingrédients avec quantités.\nFormat :\n[Titre]\nIngrédients :\n- [quantité] [nom]\n\nÉcris uniquement le texte au format indiqué sans bla-bla.",
                 },
                 {
                   type: "image_url",
@@ -144,11 +147,17 @@ export async function extractRecipeFromImageAction(
     )
   }
 
-  const recipe = extractRecipeFromText(transcribedText)
-  recipe.source = "image"
+  const result = extractMealsFromText(transcribedText, "image")
+  const recipe = result.meals[0] || {
+    title: "Nouvelle recette",
+    ingredients: [],
+    detailedIngredients: [],
+    source: "image" as const,
+  }
 
   return {
     transcribedText,
+    result,
     recipe,
   }
 }
@@ -156,7 +165,7 @@ export async function extractRecipeFromImageAction(
 export async function extractRecipeAction(input: {
   mode: "text" | "url"
   content: string
-}): Promise<ExtractedRecipe> {
+}): Promise<ExtractedMealBatch> {
   const content = input.content.trim()
   if (!content) {
     throw new Error("Veuillez saisir un texte ou une URL de recette.")
@@ -198,7 +207,11 @@ export async function extractRecipeAction(input: {
         )
       }
 
-      return extracted
+      return {
+        kind: "single",
+        meals: [extracted],
+        source: "url",
+      }
     } catch (err: unknown) {
       if (err instanceof Error && err.name === "TimeoutError") {
         throw new Error("Le site met trop de temps à répondre (délai dépassé).")
@@ -212,12 +225,17 @@ export async function extractRecipeAction(input: {
   }
 
   // Mode texte libre
-  const extracted = extractRecipeFromText(content)
-  if (extracted.ingredients.length === 0) {
+  const batch = extractMealsFromText(content, "text")
+  if (
+    batch.meals.length === 0 ||
+    (batch.meals.length === 1 &&
+      batch.meals[0].ingredients.length === 0 &&
+      !batch.meals[0].title)
+  ) {
     throw new Error(
-      "Aucun ingrédient détecté. Assurez-vous d'inclure une liste d'ingrédients (un par ligne ou séparés par des virgules)."
+      "Aucun plat ou ingrédient détecté. Assurez-vous d'inclure des noms de plats ou une liste d'ingrédients."
     )
   }
 
-  return extracted
+  return batch
 }

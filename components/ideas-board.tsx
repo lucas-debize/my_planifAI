@@ -2,7 +2,8 @@
 
 import { useMemo, useState, useTransition } from "react"
 import Link from "next/link"
-import { Download, Users } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { Download, Sparkles, Users } from "lucide-react"
 import { toast } from "sonner"
 import { PageHeader } from "@/components/page-header"
 import { EmptyState } from "@/components/empty-state"
@@ -18,6 +19,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { MagicRecipeDialog } from "@/components/magic-recipe-dialog"
 import { ingredientCountLabel } from "@/components/meal-picker"
 import { importPersonalMealsAction, importFamilyMealsAction } from "@/lib/actions/meals"
 import { actionErrorMessage } from "@/lib/errors"
@@ -36,6 +38,7 @@ export function IdeasBoard({
   isFamilyMode?: boolean
   scopeDisplayName?: string
 }) {
+  const router = useRouter()
   const [query, setQuery] = useState("")
   const [importOpen, setImportOpen] = useState(false)
   const [selectedMealIds, setSelectedMealIds] = useState<Set<string>>(new Set())
@@ -101,7 +104,21 @@ export function IdeasBoard({
       <PageHeader
         title="Idées"
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <MagicRecipeDialog
+              onBatchImported={() => router.refresh()}
+              trigger={
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-12 gap-1.5 text-primary hover:text-primary"
+                >
+                  <Sparkles className="size-4 text-primary" />
+                  <span className="hidden sm:inline">Import magique (photo, texte)</span>
+                  <span className="sm:hidden">Import magique</span>
+                </Button>
+              }
+            />
             {isFamilyMode && personalMeals.length > 0 ? (
               <Button
                 type="button"
