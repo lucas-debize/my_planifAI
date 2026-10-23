@@ -1,7 +1,18 @@
 "use client"
 
-import { useState, useTransition } from "react"
-import { Dices, Loader2, RefreshCw, Sparkles, Utensils } from "lucide-react"
+import { useRef, useState, useTransition } from "react"
+import {
+  Camera,
+  Check,
+  Dices,
+  Image as ImageIcon,
+  Loader2,
+  RefreshCw,
+  Sparkles,
+  TextQuote,
+  Trash2,
+  Utensils,
+} from "lucide-react"
 import { toast } from "sonner"
 import {
   Dialog,
@@ -12,6 +23,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
@@ -23,7 +36,14 @@ import {
   type AutoPlanOptions,
   type PlanProposal,
 } from "@/lib/ai/auto-planner"
+import {
+  extractMealsFromText,
+  parsePlanningToWeekSlots,
+  type ParsedWeekSlot,
+} from "@/lib/ai/recipe-extractor"
+import { extractRecipeFromImageAction } from "@/lib/actions/ai"
 import { applyAutoPlanAction } from "@/lib/actions/auto-plan"
+import { optimizeImageForOcr } from "@/lib/images/optimize"
 import { actionErrorMessage } from "@/lib/errors"
 import type { MealWithIngredients } from "@/lib/domain/meals"
 import type { WeekSlot } from "@/lib/domain/slots"
@@ -34,6 +54,7 @@ export function MagicPlanDialog(props: {
   onOpenChange: (open: boolean) => void
   slots: WeekSlot[]
   meals: MealWithIngredients[]
+  weekStart?: string
   onApplied: (
     appliedSlots: {
       date: string
@@ -53,11 +74,13 @@ function MagicPlanModalContent({
   onOpenChange,
   slots,
   meals,
+  weekStart,
   onApplied,
 }: {
   onOpenChange: (open: boolean) => void
   slots: WeekSlot[]
   meals: MealWithIngredients[]
+  weekStart?: string
   onApplied: (
     appliedSlots: {
       date: string
@@ -66,6 +89,9 @@ function MagicPlanModalContent({
     }[]
   ) => void
 }) {
+  const [activeTab, setActiveTab] = useState<"generator" | "scan">("generator")
+
+  // --- État Générateur automatique ---
   const [vegetarianOnly, setVegetarianOnly] = useState(false)
   const [onlyCatalog, setOnlyCatalog] = useState(false)
   const [proposals, setProposals] = useState<PlanProposal[]>(() =>
@@ -77,7 +103,21 @@ function MagicPlanModalContent({
   )
   const [isApplying, startApplyTransition] = useTransition()
 
+  // --- État Scanner / Photo / Texte ---
+  const [scanSource, setScanSource] = useState<"photo" | "text">("photo")
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null)
+  const [textInput, setTextInput] = useState("")
+  const [isAnalyzing, startAnalyzeTransition] = useTransition()
+  const [detectedSlots, setDetectedSlots] = useState<
+    { date: string; kind: SlotKind; mealName: string; selected: boolean }[]
+  >([])
+
+  const cameraInputRef = useRef<HTMLInputElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
   const emptySlotsCount = slots.filter((s) => s.meal === null).length
+  const effectiveWeekStart = weekStart ?? slots[0]?.slot_date ?? ""
 
   function generate(veg = vegetarianOnly, catalog = onlyCatalog) {
     const opts: AutoPlanOptions = {
@@ -91,6 +131,7 @@ function MagicPlanModalContent({
     })
     setProposals(generated)
   }
+
   function handleRerollSlot(index: number) {
     const target = proposals[index]
     if (!target) return
@@ -121,7 +162,7 @@ function MagicPlanModalContent({
     })
   }
 
-  function handleApply() {
+  function handleApplyGenerator() {
     if (proposals.length === 0) return
 
     startApplyTransition(async () => {
@@ -149,6 +190,129 @@ function MagicPlanModalContent({
     })
   }
 
+  // --- Handlers Scanner / Photo ---
+  async function handlePhotoSelected(file: File | undefined) {
+    if (!file) return
+    if (!file.type.startsWith("image/")) {
+      toast.error("Veuillez sélectionner un fichier image valide.")
+      return
+    }
+
+    const optimized = await optimizeImageForOcr(file)
+    if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl)
+    setPhotoFile(optimized)
+    setPhotoPreviewUrl(URL.createObjectURL(optimized))
+    setDetectedSlots([])
+  }
+
+  function handleAnalyze() {
+    if (scanSource === "photo") {
+      if (!photoFile) {
+        toast.error("Veuillez d'abord prendre ou choisir une photo.")
+        return
+      }
+
+      startAnalyzeTransition(async () => {
+        try {
+          const formData = new FormData()
+          formData.append("image", photoFile)
+          const result = await extractRecipeFromImageAction(formData)
+          processTranscribedText(result.transcribedText)
+        } catch (err) {
+          toast.error(actionErrorMessage(err))
+        }
+      })
+      return
+    }
+
+    if (!textInput.trim()) {
+      toast.error("Veuillez entrer du texte pour votre planning.")
+      return
+    }
+
+    processTranscribedText(textInput)
+  }
+
+  function processTranscribedText(text: string) {
+    const parsedSlots = parsePlanningToWeekSlots(text, effectiveWeekStart)
+
+    if (parsedSlots.length > 0) {
+      setDetectedSlots(
+        parsedSlots.map((s) => ({
+          date: s.date,
+          kind: s.kind,
+          mealName: s.mealName,
+          selected: true,
+        }))
+      )
+      toast.success(`${parsedSlots.length} repas détectés avec leurs jours !`)
+      return
+    }
+
+    // Repli : extraction de plats simples sans jours identifiés
+    const batch = extractMealsFromText(text, "image")
+    if (batch.meals.length > 0) {
+      // Assigner dans l'ordre chronologique aux créneaux vides de la semaine
+      const emptySlots = slots.filter((s) => s.meal === null)
+      const mapped = batch.meals.slice(0, emptySlots.length).map((m, idx) => ({
+        date: emptySlots[idx].slot_date,
+        kind: emptySlots[idx].slot_kind,
+        mealName: m.title,
+        selected: true,
+      }))
+
+      if (mapped.length > 0) {
+        setDetectedSlots(mapped)
+        toast.success(
+          `${mapped.length} plats identifiés et pré-assignés aux créneaux vides.`
+        )
+        return
+      }
+    }
+
+    toast.error(
+      "Aucun plat ou planning n'a pu être reconnu dans cette source. Vérifiez la netteté de la photo."
+    )
+  }
+
+  function handleApplyScan() {
+    const selected = detectedSlots.filter((s) => s.selected && s.mealName.trim())
+    if (selected.length === 0) {
+      toast.error("Veuillez cocher au moins un créneau à appliquer.")
+      return
+    }
+
+    startApplyTransition(async () => {
+      try {
+        const payload = selected.map((s) => {
+          // Vérifier si le plat existe déjà dans le catalogue
+          const existing = meals.find(
+            (m) => m.name.toLowerCase() === s.mealName.trim().toLowerCase()
+          )
+          return {
+            date: s.date,
+            kind: s.kind,
+            meal: {
+              id: existing?.id,
+              name: s.mealName.trim(),
+              ingredients: existing?.ingredients.map((i) => i.name) ?? [],
+              origin: existing ? ("catalog" as const) : ("ai" as const),
+            },
+          }
+        })
+
+        const result = await applyAutoPlanAction(payload)
+        onApplied(result.slots)
+        toast.success(
+          `${result.count} créneau${result.count > 1 ? "s" : ""} rempli${result.count > 1 ? "s" : ""} depuis votre semainier !`
+        )
+        onOpenChange(false)
+      } catch (err) {
+        toast.error(actionErrorMessage(err))
+      }
+    })
+  }
+
   const categoryEmoji: Record<string, string> = {
     poisson: "🐟 Poisson",
     viande: "🥩 Viande",
@@ -157,37 +321,75 @@ function MagicPlanModalContent({
   }
 
   return (
-    <DialogContent className="max-h-[85vh] overflow-hidden sm:max-w-lg flex flex-col">
-        <DialogHeader>
-          <div className="flex items-center gap-2">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <Sparkles className="size-4" />
-            </div>
-            <div>
-              <DialogTitle className="font-fraunces text-lg">
-                Magic Fill : Remplir la semaine avec l&apos;IA
-              </DialogTitle>
-              <DialogDescription className="text-xs text-muted-foreground">
-                Complète intelligemment les créneaux vides en respectant l&apos;équilibre et la
-                rotation des repas.
-              </DialogDescription>
-            </div>
+    <DialogContent className="max-h-[90vh] overflow-hidden sm:max-w-xl flex flex-col p-4 sm:p-6 transition-all">
+      <DialogHeader>
+        <div className="flex items-center gap-2.5">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            {activeTab === "generator" ? (
+              <Sparkles className="size-5" />
+            ) : (
+              <Camera className="size-5" />
+            )}
           </div>
-        </DialogHeader>
+          <div>
+            <DialogTitle className="font-fraunces text-lg sm:text-xl text-ink">
+              {activeTab === "generator"
+                ? "Générer la semaine avec l'IA"
+                : "Scanner un planning (Photo / Semainier)"}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              {activeTab === "generator"
+                ? "Complète intelligemment les créneaux vides en respectant l'équilibre alimentaire."
+                : "Photographiez votre semainier frigo, menu de cantine ou collez vos repas de la semaine."}
+            </DialogDescription>
+          </div>
+        </div>
+      </DialogHeader>
 
-        {emptySlotsCount === 0 ? (
+      {/* Onglets Générateur vs Scanner */}
+      <div className="grid grid-cols-2 rounded-xl bg-muted/70 p-1 text-xs font-medium">
+        <button
+          type="button"
+          className={cn(
+            "tap-press flex items-center justify-center gap-1.5 rounded-lg py-2 px-3 transition-all",
+            activeTab === "generator"
+              ? "bg-card text-ink shadow-xs font-bold"
+              : "text-muted-foreground hover:text-ink"
+          )}
+          onClick={() => setActiveTab("generator")}
+        >
+          <Sparkles className="size-3.5 text-primary" />
+          <span>Générateur IA</span>
+        </button>
+        <button
+          type="button"
+          className={cn(
+            "tap-press flex items-center justify-center gap-1.5 rounded-lg py-2 px-3 transition-all",
+            activeTab === "scan"
+              ? "bg-card text-ink shadow-xs font-bold"
+              : "text-muted-foreground hover:text-ink"
+          )}
+          onClick={() => setActiveTab("scan")}
+        >
+          <Camera className="size-3.5 text-primary" />
+          <span>Scanner un planning</span>
+        </button>
+      </div>
+
+      {activeTab === "generator" ? (
+        /* ================= VUE 1 : GÉNÉRATEUR AUTOMATIQUE ================= */
+        emptySlotsCount === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 py-8 text-center">
             <Utensils className="size-8 text-muted-foreground/60" />
             <p className="font-fraunces text-base text-ink">
               Tous les créneaux de cette semaine sont déjà remplis !
             </p>
             <p className="max-w-xs text-xs text-muted-foreground">
-              Videz quelques créneaux pour laisser l&apos;IA vous faire des propositions
-              équilibrées.
+              Videz quelques créneaux pour laisser l&apos;IA vous faire des propositions équilibrées.
             </p>
           </div>
         ) : (
-          <>
+          <div className="flex flex-1 flex-col min-h-0 gap-3">
             {/* Options de filtrage rapide */}
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-muted/40 p-2.5 text-xs">
               <div className="flex items-center gap-2">
@@ -249,7 +451,7 @@ function MagicPlanModalContent({
                         <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                           {dateLabel} · {SLOT_LABEL[proposal.kind]}
                         </span>
-                        <span className="truncate font-fraunces text-sm font-medium text-ink">
+                        <span className="truncate font-fraunces text-sm font-semibold text-ink">
                           {proposal.meal.name}
                         </span>
                         <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px]">
@@ -301,7 +503,7 @@ function MagicPlanModalContent({
                 </Button>
                 <Button
                   type="button"
-                  onClick={handleApply}
+                  onClick={handleApplyGenerator}
                   disabled={proposals.length === 0 || isApplying}
                   className="gap-2"
                 >
@@ -319,8 +521,302 @@ function MagicPlanModalContent({
                 </Button>
               </div>
             </DialogFooter>
-          </>
-        )}
+          </div>
+        )
+      ) : (
+        /* ================= VUE 2 : SCANNER UN PLANNING ================= */
+        <div className="flex flex-1 flex-col min-h-0 gap-3">
+          {detectedSlots.length === 0 ? (
+            <>
+              {/* Choix mode photo vs texte */}
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={scanSource === "photo" ? "default" : "outline"}
+                  size="sm"
+                  className="gap-1.5 text-xs flex-1"
+                  onClick={() => setScanSource("photo")}
+                >
+                  <Camera className="size-3.5" />
+                  <span>Photo / Image</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant={scanSource === "text" ? "default" : "outline"}
+                  size="sm"
+                  className="gap-1.5 text-xs flex-1"
+                  onClick={() => setScanSource("text")}
+                >
+                  <TextQuote className="size-3.5" />
+                  <span>Texte / Liste</span>
+                </Button>
+              </div>
+
+              {scanSource === "photo" ? (
+                <div className="flex flex-col gap-3">
+                  <input
+                    ref={cameraInputRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={(e) => {
+                      void handlePhotoSelected(e.target.files?.[0])
+                      e.target.value = ""
+                    }}
+                  />
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      void handlePhotoSelected(e.target.files?.[0])
+                      e.target.value = ""
+                    }}
+                  />
+
+                  {photoPreviewUrl ? (
+                    <div className="relative flex flex-col items-center gap-2 rounded-xl border border-line bg-muted/30 p-3">
+                      <img
+                        src={photoPreviewUrl}
+                        alt="Aperçu du planning"
+                        className="max-h-48 w-auto rounded-lg object-contain shadow-2xs"
+                      />
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>{photoFile?.name}</span>
+                        <span>·</span>
+                        <span>{photoFile ? `${Math.round(photoFile.size / 1024)} Ko` : ""}</span>
+                      </div>
+                      <div className="mt-1 flex gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs"
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={isAnalyzing}
+                        >
+                          Changer d&apos;image
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 text-xs text-destructive hover:bg-destructive/10"
+                          onClick={() => {
+                            setPhotoFile(null)
+                            if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl)
+                            setPhotoPreviewUrl(null)
+                          }}
+                          disabled={isAnalyzing}
+                        >
+                          <Trash2 className="size-3.5 mr-1" />
+                          Supprimer
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-line bg-muted/20 p-6 text-center">
+                      <div className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
+                        <Camera className="size-6" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-ink">
+                          Prenez en photo votre semainier
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Tableau de repas frigo, planning familial manuscrit ou menu imprimé.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap justify-center gap-2 pt-1">
+                        <Button
+                          type="button"
+                          variant="default"
+                          size="sm"
+                          className="gap-1.5"
+                          onClick={() => cameraInputRef.current?.click()}
+                        >
+                          <Camera className="size-4" />
+                          <span>Prendre une photo</span>
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5"
+                          onClick={() => fileInputRef.current?.click()}
+                        >
+                          <ImageIcon className="size-4" />
+                          <span>Choisir une image</span>
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <Textarea
+                    value={textInput}
+                    onChange={(e) => setTextInput(e.target.value)}
+                    placeholder={`Collez votre planning de la semaine...\n\nExemple :\nLundi midi : Poulet rôti et pommes de terre\nLundi soir : Salade composée\nMardi soir : Quiche lorraine\nMercredi midi : Pavé de saumon et riz`}
+                    rows={7}
+                    className="resize-none font-sans text-xs"
+                    disabled={isAnalyzing}
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    ⚡ Reconnaît automatiquement les jours (Lundi...Dimanche) et créneaux (midi/soir).
+                  </p>
+                </div>
+              )}
+
+              <DialogFooter className="mt-2 flex-col gap-2 sm:flex-row sm:justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => onOpenChange(false)}
+                  disabled={isAnalyzing}
+                >
+                  Annuler
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleAnalyze}
+                  disabled={
+                    (scanSource === "photo" && !photoFile) ||
+                    (scanSource === "text" && !textInput.trim()) ||
+                    isAnalyzing
+                  }
+                  className="gap-2"
+                >
+                  {isAnalyzing ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      <span>Analyse en cours...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="size-4" />
+                      <span>Analyser le planning</span>
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            /* Aperçu des créneaux détectés avec checkboxes */
+            <div className="flex flex-1 flex-col min-h-0 gap-3">
+              <div className="flex items-center justify-between rounded-xl border border-line bg-muted/40 p-2.5">
+                <span className="text-xs font-semibold text-ink">
+                  {detectedSlots.filter((s) => s.selected).length} créneau
+                  {detectedSlots.filter((s) => s.selected).length > 1 ? "s" : ""} sélectionné
+                  {detectedSlots.filter((s) => s.selected).length > 1 ? "s" : ""}
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs text-muted-foreground hover:text-ink"
+                  onClick={() => setDetectedSlots([])}
+                >
+                  <RefreshCw className="mr-1 size-3" />
+                  Scanner à nouveau
+                </Button>
+              </div>
+
+              <ScrollArea className="flex-1 max-h-[46vh] pr-2">
+                <div className="flex flex-col gap-2 py-1">
+                  {detectedSlots.map((slot, idx) => {
+                    const parsed = parseISODate(slot.date)
+                    const dateLabel = parsed ? slotTitleDate(parsed) : slot.date
+
+                    return (
+                      <div
+                        key={`${slot.date}:${slot.kind}:${idx}`}
+                        className={cn(
+                          "flex items-center gap-2.5 rounded-xl border p-2.5 transition-all",
+                          slot.selected
+                            ? "border-line bg-surface shadow-2xs"
+                            : "border-line/40 bg-muted/20 opacity-60"
+                        )}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDetectedSlots((prev) => {
+                              const next = [...prev]
+                              next[idx] = { ...slot, selected: !slot.selected }
+                              return next
+                            })
+                          }}
+                          className={cn(
+                            "tap-press flex size-6 shrink-0 items-center justify-center rounded-md border transition-colors",
+                            slot.selected
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-line bg-background text-transparent"
+                          )}
+                        >
+                          <Check className="size-3.5 stroke-[3]" />
+                        </button>
+
+                        <div className="flex min-w-0 flex-1 flex-col gap-1">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                            {dateLabel} · {SLOT_LABEL[slot.kind]}
+                          </span>
+                          <Input
+                            value={slot.mealName}
+                            onChange={(e) => {
+                              const val = e.target.value
+                              setDetectedSlots((prev) => {
+                                const next = [...prev]
+                                next[idx] = { ...slot, mealName: val }
+                                return next
+                              })
+                            }}
+                            className="h-8 font-fraunces text-sm font-semibold"
+                            placeholder="Nom du plat"
+                          />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </ScrollArea>
+
+              <DialogFooter className="mt-2 flex-col gap-2 sm:flex-row sm:justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setDetectedSlots([])}
+                  disabled={isApplying}
+                >
+                  Retour
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleApplyScan}
+                  disabled={
+                    detectedSlots.filter((s) => s.selected).length === 0 || isApplying
+                  }
+                  className="gap-2"
+                >
+                  {isApplying ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" />
+                      <span>Application...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="size-4" />
+                      <span>Appliquer à ma semaine</span>
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+        </div>
+      )}
     </DialogContent>
   )
 }

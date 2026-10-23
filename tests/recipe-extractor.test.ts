@@ -352,5 +352,20 @@ Ingrédients :
       expect(batch.meals[0].isDefaultRecipe).toBe(true)
       expect(batch.meals[0].detailedIngredients.length > 0).toBe(true)
     })
+
+    it("détecte un planning avec jours sur des lignes séparées", () => {
+      const text = `LUNDI MIDI
+Poulet rôti
+MARDI SOIR
+Salade César
+MERCREDI
+Quiche lorraine`
+      const batch = extractMealsFromText(text, "image")
+      expect(batch.kind).toBe("list")
+      expect(batch.meals.length).toBe(3)
+      expect(batch.meals[0].title).toBe("Poulet rôti")
+      expect(batch.meals[1].title).toBe("Salade César")
+      expect(batch.meals[2].title).toBe("Quiche lorraine")
+    })
   })
 })

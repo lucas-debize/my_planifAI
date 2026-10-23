@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Download, Sparkles, Users } from "lucide-react"
+import { ArrowRight, Download, Plus, Search, Sparkles, Users, X } from "lucide-react"
 import { toast } from "sonner"
 import { PageHeader } from "@/components/page-header"
 import { EmptyState } from "@/components/empty-state"
@@ -111,11 +111,12 @@ export function IdeasBoard({
                 <Button
                   type="button"
                   variant="outline"
-                  className="min-h-12 gap-1.5 text-primary hover:text-primary"
+                  size="sm"
+                  className="tap-press min-h-10 gap-1.5 rounded-xl border-primary/30 bg-primary/10 text-xs font-semibold text-primary hover:bg-primary/20 shadow-2xs transition-all sm:min-h-11 sm:text-sm"
                 >
                   <Sparkles className="size-4 text-primary" />
                   <span className="hidden sm:inline">Import magique (photo, texte)</span>
-                  <span className="sm:hidden">Import magique</span>
+                  <span className="sm:hidden">Import IA</span>
                 </Button>
               }
             />
@@ -123,7 +124,8 @@ export function IdeasBoard({
               <Button
                 type="button"
                 variant="outline"
-                className="min-h-12 gap-1.5"
+                size="sm"
+                className="tap-press min-h-10 gap-1.5 rounded-xl border-line bg-surface text-xs font-semibold hover:bg-muted shadow-2xs transition-all sm:min-h-11 sm:text-sm"
                 onClick={() => {
                   setSelectedMealIds(new Set(personalMeals.map((m) => m.id)))
                   setImportOpen(true)
@@ -138,7 +140,8 @@ export function IdeasBoard({
               <Button
                 type="button"
                 variant="outline"
-                className="min-h-12 gap-1.5"
+                size="sm"
+                className="tap-press min-h-10 gap-1.5 rounded-xl border-line bg-surface text-xs font-semibold hover:bg-muted shadow-2xs transition-all sm:min-h-11 sm:text-sm"
                 onClick={() => {
                   setSelectedMealIds(new Set(familyMeals.map((m) => m.id)))
                   setImportOpen(true)
@@ -149,8 +152,11 @@ export function IdeasBoard({
                 <span className="sm:hidden">Importer groupe</span>
               </Button>
             ) : null}
-            <Button asChild className="min-h-12">
-              <Link href="/idees/nouvelle">Nouvelle idée</Link>
+            <Button asChild size="sm" className="tap-press min-h-10 gap-1.5 rounded-xl text-xs font-semibold shadow-2xs transition-all sm:min-h-11 sm:text-sm">
+              <Link href="/idees/nouvelle">
+                <Plus className="size-4" />
+                <span>Nouvelle idée</span>
+              </Link>
             </Button>
           </div>
         }
@@ -173,12 +179,26 @@ export function IdeasBoard({
           </span>
         </div>
 
-        <Input
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Rechercher un plat ou un ingrédient"
-          aria-label="Rechercher un plat ou un ingrédient"
-        />
+        <div className="relative">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Rechercher un plat ou un ingrédient..."
+            aria-label="Rechercher un plat ou un ingrédient"
+            className="pl-10 pr-9 min-h-11 rounded-xl border-line/80 bg-surface shadow-2xs focus-visible:ring-primary/30"
+          />
+          {query ? (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              className="tap-press absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-ink"
+              aria-label="Effacer la recherche"
+            >
+              <X className="size-4" />
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {meals.length === 0 ? (
@@ -214,32 +234,38 @@ export function IdeasBoard({
           </div>
         </div>
       ) : (
-        <ul className="mt-4 grid gap-3 px-4 pb-8 md:grid-cols-2 md:px-8">
+        <ul className="mt-4 grid gap-3.5 px-4 pb-8 sm:grid-cols-2 lg:grid-cols-3 md:px-8">
           {filtered.map((meal) => (
             <li key={meal.id}>
               <Link
                 href={`/idees/${meal.id}`}
-                className="tap-press block min-h-20 rounded-[1rem] bg-surface p-4 shadow-card hover:bg-muted/40 transition-colors"
+                className="tap-press flex flex-col justify-between min-h-24 rounded-2xl border border-line/70 bg-surface p-4 shadow-2xs hover:shadow-xs hover:border-line hover:bg-surface/90 transition-all group"
               >
-                <div className="flex items-start justify-between gap-2">
-                  <p className="font-fraunces text-xl break-words line-clamp-2">
-                    {meal.name}
+                <div>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-fraunces text-lg sm:text-xl font-bold tracking-tight text-ink group-hover:text-primary transition-colors break-words line-clamp-2">
+                      {meal.name}
+                    </p>
+                    {isFamilyMode ? (
+                      meal.createdByName ? (
+                        <span className="shrink-0 rounded-full bg-muted/80 px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                          {meal.createdByName}
+                        </span>
+                      ) : meal.origin === "ai" ? (
+                        <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary uppercase tracking-wider">
+                          IA
+                        </span>
+                      ) : null
+                    ) : null}
+                  </div>
+                  <p className="mt-1 text-xs sm:text-sm text-muted-foreground font-medium">
+                    {ingredientCountLabel(meal.ingredients.length)}
                   </p>
-                  {isFamilyMode ? (
-                    meal.createdByName ? (
-                      <span className="shrink-0 rounded-full bg-muted/80 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-                        Ajouté par {meal.createdByName}
-                      </span>
-                    ) : meal.origin === "ai" ? (
-                      <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
-                        Par IA
-                      </span>
-                    ) : null
-                  ) : null}
                 </div>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {ingredientCountLabel(meal.ingredients.length)}
-                </p>
+                <div className="mt-3 flex items-center justify-between text-[11px] text-muted-foreground/70 group-hover:text-primary font-semibold transition-colors">
+                  <span>Modifier le plat</span>
+                  <span className="transform group-hover:translate-x-1 transition-transform">→</span>
+                </div>
               </Link>
             </li>
           ))}

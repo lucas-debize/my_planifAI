@@ -43,22 +43,26 @@ export function WorkspaceSwitcher({
     <DropdownMenu>
       <DropdownMenuTrigger
         className={cn(
-          "tap-press flex items-center gap-2 rounded-[0.75rem] border border-line bg-surface text-ink transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          "tap-press inline-flex items-center gap-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           compact
-            ? "size-10 justify-center p-0 sm:size-11"
-            : "w-full justify-between px-3 py-2 text-sm",
+            ? "h-8 px-2.5 rounded-full border border-primary/25 bg-primary/10 text-primary text-xs font-semibold hover:bg-primary/20 shadow-2xs"
+            : "w-full justify-between rounded-xl border border-line bg-surface px-3 py-2.5 text-sm hover:bg-muted text-ink shadow-2xs",
           className
         )}
         aria-label="Changer d'espace de travail"
         disabled={isPending}
       >
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 items-center gap-1.5">
           {isFamily ? (
-            <Users className="size-4 shrink-0 text-primary" />
+            <Users className="size-3.5 shrink-0 text-primary" />
           ) : (
-            <User className="size-4 shrink-0 text-muted-foreground" />
+            <User className="size-3.5 shrink-0 text-muted-foreground" />
           )}
-          {!compact ? (
+          {compact ? (
+            <span className="truncate max-w-[90px] text-[11px] font-bold">
+              {isFamily ? scope.displayName : "Perso"}
+            </span>
+          ) : (
             <div className="flex min-w-0 flex-col text-left leading-tight">
               <span className="truncate text-[11px] font-medium text-muted-foreground">
                 Espace actif
@@ -69,9 +73,9 @@ export function WorkspaceSwitcher({
                   : "Mon planning perso"}
               </span>
             </div>
-          ) : null}
+          )}
         </div>
-        <ChevronDown className="size-3.5 shrink-0 opacity-60" />
+        <ChevronDown className="size-3 shrink-0 opacity-70" />
       </DropdownMenuTrigger>
 
       <DropdownMenuContent

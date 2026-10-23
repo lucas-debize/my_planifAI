@@ -109,12 +109,12 @@ export function WeekBoard({
               type="button"
               variant="outline"
               size="sm"
-              className="min-h-10 gap-1.5 text-xs font-medium text-primary hover:text-primary"
+              className="tap-press min-h-10 gap-1.5 rounded-xl border-primary/30 bg-primary/10 text-xs font-semibold text-primary hover:bg-primary/20 shadow-2xs transition-all sm:min-h-11 sm:text-sm"
               onClick={() => setMagicPlanOpen(true)}
             >
-              <Sparkles className="size-3.5 text-primary" />
+              <Sparkles className="size-4 text-primary" />
               <span className="hidden sm:inline">Remplir avec l&apos;IA</span>
-              <span className="sm:hidden">Magic Fill</span>
+              <span className="sm:hidden">Remplir IA</span>
             </Button>
             <DownloadPdfButton weekStart={weekStart} />
           </div>
@@ -124,7 +124,7 @@ export function WeekBoard({
         <WeekSwitcher weekStart={weekStart} hrefFor={hrefForWeek} />
       </div>
 
-      <div className="sticky top-0 z-30 border-b border-line bg-bg px-3 py-2 md:hidden">
+      <div className="sticky top-0 z-30 border-b border-line/80 bg-bg/95 backdrop-blur-md px-4 py-2 md:hidden shadow-2xs">
         <WeekSwitcher compact weekStart={weekStart} hrefFor={hrefForWeek} />
       </div>
 
@@ -313,6 +313,7 @@ export function WeekBoard({
         onOpenChange={setMagicPlanOpen}
         slots={slots}
         meals={meals}
+        weekStart={weekStart}
         onApplied={(applied) => {
           startTransition(() => {
             for (const item of applied) {
@@ -387,20 +388,24 @@ function DayHeading({ day }: { day: Date }) {
   const today = isToday(day)
   const past = isPastDay(day)
   return (
-    <div className="mb-2 flex min-h-10 flex-col gap-1 px-1">
-      <h2 className="day-heading font-source text-sm capitalize leading-tight md:text-base">
+    <div className="mb-2 flex min-h-8 items-center justify-between gap-1 px-1">
+      <h2
+        className={cn(
+          "day-heading font-fraunces text-sm sm:text-base font-bold capitalize tracking-tight truncate",
+          today ? "text-mark font-extrabold" : "text-ink"
+        )}
+      >
         {day.toLocaleDateString("fr-FR", {
           weekday: "short",
           day: "numeric",
-          month: "short",
         })}
       </h2>
       {today ? (
-        <span className="w-fit rounded-full bg-mark px-2 py-0.5 text-[11px] font-medium text-accent-fg">
+        <span className="shrink-0 rounded-full bg-mark px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-accent-fg shadow-2xs">
           Aujourd’hui
         </span>
       ) : past ? (
-        <span className="w-fit text-[11px] font-medium text-muted-foreground">
+        <span className="shrink-0 text-[10px] font-medium text-muted-foreground/75">
           Passé
         </span>
       ) : null}

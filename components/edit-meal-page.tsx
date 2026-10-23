@@ -42,8 +42,7 @@ export function EditMealPage({
             type="button"
             variant="destructive"
             size="sm"
-            className="min-h-10 text-xs sm:min-h-12 sm:text-sm"
-            onClick={() => setOpen(true)}
+            className="tap-press min-h-10 rounded-xl px-3 text-xs font-semibold sm:min-h-11 sm:text-sm shadow-2xs"
           >
             Supprimer
           </Button>

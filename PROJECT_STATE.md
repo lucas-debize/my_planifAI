@@ -1,6 +1,6 @@
-# État du Projet PlanifIA (Octobre 2026)
+# État du Projet MyPlanifAI (Octobre 2026)
 
-Ce document conserve l'intégralité du contexte architectural, fonctionnel et technique de l'application PlanifIA pour assurer une continuité parfaite entre toutes les sessions et terminaux.
+Ce document conserve l'intégrité du contexte architectural, fonctionnel et technique de l'application MyPlanifAI pour assurer une continuité parfaite entre toutes les sessions et terminaux.
 
 ---
 

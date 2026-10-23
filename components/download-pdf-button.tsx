@@ -9,7 +9,7 @@ import { parseISODate, weekLabel } from "@/lib/dates"
 export function DownloadPdfButton({ weekStart }: { weekStart: string }) {
   const [busy, setBusy] = useState(false)
   const href = `/api/pdf/semaine/${weekStart}`
-  const filename = `planifia-${weekStart}.pdf`
+  const filename = `myplanifia-${weekStart}.pdf`
 
   async function downloadFromResponse(response: Response) {
     if (!response.ok) throw new Error("PDF_FAILED")
@@ -57,7 +57,7 @@ export function DownloadPdfButton({ weekStart }: { weekStart: string }) {
       download={filename}
       onClick={onClick}
       aria-busy={busy}
-      className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-[0.75rem] border border-border bg-background px-2.5 text-xs font-medium hover:bg-muted sm:min-h-12 sm:gap-2 sm:px-4 sm:text-sm"
+      className="tap-press inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-line bg-surface px-3 text-xs font-semibold text-ink hover:bg-muted shadow-2xs transition-colors sm:min-h-11 sm:gap-2 sm:px-4 sm:text-sm"
     >
       {busy ? (
         <>

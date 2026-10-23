@@ -27,37 +27,47 @@ export function WeekSwitcher({
   const prev = toISODate(addDays(monday, -7))
   const next = toISODate(addDays(monday, 7))
   const current = currentMondayIso() === weekStart
+  const todayIso = currentMondayIso()
 
   return (
-    <div className="flex items-center gap-2">
+    <div className={cn("flex items-center justify-between gap-2", compact ? "py-1" : "py-2")}>
       <Link
         href={hrefFor(prev)}
-        className="tap-press inline-flex size-12 shrink-0 items-center justify-center rounded-[0.75rem] hover:bg-muted"
+        className="tap-press inline-flex size-9 shrink-0 items-center justify-center rounded-xl border border-line/60 bg-surface text-ink hover:bg-muted shadow-2xs transition-colors"
         aria-label="Semaine précédente"
       >
-        <ChevronLeft className="size-5" />
+        <ChevronLeft className="size-4.5" />
       </Link>
-      <div className="flex min-w-0 flex-1 flex-col">
+
+      <div className="flex min-w-0 flex-1 items-center justify-center gap-2 text-center">
         <p
           className={cn(
-            "font-fraunces leading-tight",
-            compact ? "truncate text-base" : "text-lg"
+            "font-fraunces font-bold tracking-tight text-ink",
+            compact ? "truncate text-xs sm:text-sm font-semibold" : "text-sm sm:text-base font-bold"
           )}
         >
           {compact ? weekLabelShort(monday) : weekLabel(monday)}
         </p>
-        {current && !compact ? (
-          <Badge variant="outline" className="mt-1 w-fit border-mark text-mark">
-            Cette semaine
-          </Badge>
-        ) : null}
+        {current ? (
+          <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
+            En cours
+          </span>
+        ) : (
+          <Link
+            href={hrefFor(todayIso)}
+            className="tap-press shrink-0 rounded-full border border-primary/30 bg-primary/5 px-2 py-0.5 text-[10px] font-semibold text-primary hover:bg-primary/15 transition-colors"
+          >
+            Aujourd&apos;hui
+          </Link>
+        )}
       </div>
+
       <Link
         href={hrefFor(next)}
-        className="tap-press inline-flex size-12 shrink-0 items-center justify-center rounded-[0.75rem] hover:bg-muted"
+        className="tap-press inline-flex size-9 shrink-0 items-center justify-center rounded-xl border border-line/60 bg-surface text-ink hover:bg-muted shadow-2xs transition-colors"
         aria-label="Semaine suivante"
       >
-        <ChevronRight className="size-5" />
+        <ChevronRight className="size-4.5" />
       </Link>
     </div>
   )

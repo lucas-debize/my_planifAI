@@ -1,5 +1,7 @@
 import { displayName, normalizeName } from "@/lib/ingredients"
 import { STAPLE_MEALS } from "@/lib/ai/auto-planner"
+import { addDays } from "date-fns"
+import { parseISODate, toISODate } from "@/lib/dates"
 
 export type ExtractedIngredient = {
   name: string
@@ -626,6 +628,14 @@ export function getDefaultRecipeForDish(dishName: string): ExtractedIngredient[]
  */
 export function cleanDishName(rawName: string): string {
   let s = rawName.trim()
+  // Si la chaîne est juste un nom de jour ou créneau sans plat, ce n'est pas un plat
+  if (
+    /^(?:[-*•+–—\s\d.)\]]*)(?:(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)(?:\s+(?:midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter))?|(?:midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter))\s*[:\-–—.]?\s*$/i.test(
+      s
+    )
+  ) {
+    return ""
+  }
   s = s.replace(
     /^(?:[-*•+–—\s\d.)\]]*)(?:(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)(?:\s+(?:midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter))?|(?:midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter))\s*[:\-–—.]\s*/i,
     ""
@@ -634,15 +644,77 @@ export function cleanDishName(rawName: string): string {
   s = s.replace(/^[-*•+–—\s\d.)\]]+/, "")
   s = s.replace(/\s*\((?:midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter|reste|rapide)\)\s*$/i, "")
   s = s.replace(/[.:;!]+$/, "").trim()
+  if (
+    /^(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|midi|soir|d[eé]jeuner|d[iî]ner)$/i.test(
+      s
+    )
+  ) {
+    return ""
+  }
   return displayName(s)
 }
 
-const HEADER_LINE_REGEX =
+export const HEADER_LINE_REGEX =
   /^(?:planning|menu|programme|repas|id[eé]es?\s+de\s+repas|semaine|liste\s+de\s+plats?)(?:\s+(?:de\s+la\s+semaine|semaine|\d+))?\s*:?$/i
 
-const DAY_PREFIX_LINE_REGEX =
+export const DAY_PREFIX_LINE_REGEX =
   /^(?:[-*•+–—\s\d.)\]]*)(?:(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)(?:\s+(?:midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter))?|(?:midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter))\s*[:\-–—.]\s*(.+)$/i
 
+export const DAY_STANDALONE_REGEX =
+  /^(?:[-*•+–—\s\d.)\]]*)(?:(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)(?:\s+(?:midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter))?|(?:midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter))\s*[:\-–—.]?\s*$/i
+
+export function normalizeDayLines(lines: string[]): string[] {
+  const result: string[] = []
+  const DAY_NAME_ONLY =
+    /^(?:[-*•+–—\s\d.)\]]*)(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\s*[:\-–—.]?\s*$/i
+  const SLOT_ONLY =
+    /^(?:[-*•+–—\s\d.)\]]*)(midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter)\s*[:\-–—.]\s*(.+)$/i
+
+  let currentDay = ""
+
+  for (let i = 0; i < lines.length; i++) {
+    const current = lines[i].trim()
+    if (!current) continue
+
+    const dayMatch = current.match(DAY_NAME_ONLY)
+    if (dayMatch) {
+      currentDay = dayMatch[1].toLowerCase()
+      if (i + 1 < lines.length) {
+        const next = lines[i + 1].trim()
+        const slotMatch = next.match(SLOT_ONLY)
+        if (slotMatch) {
+          result.push(`${currentDay} ${slotMatch[1]} : ${slotMatch[2]}`)
+          i++
+          continue
+        } else if (!DAY_STANDALONE_REGEX.test(next) && !HEADER_LINE_REGEX.test(next)) {
+          result.push(`${currentDay} : ${next}`)
+          i++
+          continue
+        }
+      }
+      continue
+    }
+
+    const standaloneMatch = current.match(DAY_STANDALONE_REGEX)
+    if (standaloneMatch && i + 1 < lines.length) {
+      const next = lines[i + 1].trim()
+      if (next && !DAY_STANDALONE_REGEX.test(next) && !HEADER_LINE_REGEX.test(next)) {
+        result.push(`${current.replace(/[:\-–—.]*\s*$/, "")} : ${next}`)
+        i++
+        continue
+      }
+    }
+
+    const slotMatch = current.match(SLOT_ONLY)
+    if (slotMatch && currentDay) {
+      result.push(`${currentDay} ${slotMatch[1]} : ${slotMatch[2]}`)
+      continue
+    }
+
+    result.push(current)
+  }
+  return result
+}
 const PLAT_MARKER_REGEX =
   /^(?:={2,}\s*)?PLAT\s*:\s*([^\n=]+?)(?:\s*={2,})?$/i
 
@@ -788,7 +860,7 @@ export function extractMealsFromText(
     }
   }
 
-  const lines = rawText.split(/\r?\n/)
+  const lines = normalizeDayLines(rawText.split(/\r?\n/))
 
   // Heuristique 1 : Marqueurs multi-plats explicites (=== PLAT : [Nom] === ou PLAT : [Nom])
   const platMarkerCount = lines.filter((l) => PLAT_MARKER_REGEX.test(l.trim())).length
@@ -968,6 +1040,91 @@ export function extractMealsFromText(
     meals: [single],
     source: source ?? "text",
   }
+}
+
+export type ParsedWeekSlot = {
+  date: string
+  kind: "dejeuner" | "diner"
+  mealName: string
+}
+
+const DAY_NAME_TO_INDEX: Record<string, number> = {
+  lundi: 0,
+  mardi: 1,
+  mercredi: 2,
+  jeudi: 3,
+  vendredi: 4,
+  samedi: 5,
+  dimanche: 6,
+}
+
+/**
+ * Découpe un texte issu d'une photo ou d'un semainier texte pour l'assigner directement
+ * aux créneaux midi/soir de la semaine choisie.
+ */
+export function parsePlanningToWeekSlots(
+  rawText: string,
+  mondayIso: string
+): ParsedWeekSlot[] {
+  const rawLines = rawText.split(/\r?\n/)
+  const lines = normalizeDayLines(rawLines)
+  const results: ParsedWeekSlot[] = []
+  const monday = parseISODate(mondayIso)
+  if (!monday) return []
+
+  const assignedPerDay: Record<number, { lunch?: boolean; dinner?: boolean }> = {}
+
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed || HEADER_LINE_REGEX.test(trimmed)) continue
+
+    const match = trimmed.match(DAY_PREFIX_LINE_REGEX)
+    if (match) {
+      const prefix = match[1]?.toLowerCase() ?? ""
+      const dishRaw = match[2]
+      const dishName = cleanDishName(dishRaw)
+      if (!dishName || dishName.length < 2) continue
+
+      let dayIndex: number | null = null
+      for (const [dayName, idx] of Object.entries(DAY_NAME_TO_INDEX)) {
+        if (prefix.includes(dayName)) {
+          dayIndex = idx
+          break
+        }
+      }
+
+      if (dayIndex === null) continue
+
+      const dateStr = toISODate(addDays(monday, dayIndex))
+      const isLunch = /midi|d[eé]jeuner|matin/i.test(prefix)
+      const isDinner = /soir|d[iî]ner/i.test(prefix)
+
+      let kind: "dejeuner" | "diner" = "diner"
+      if (isLunch) {
+        kind = "dejeuner"
+      } else if (isDinner) {
+        kind = "diner"
+      } else {
+        // Pas de créneau spécifié : affecter au déjeuner d'abord, puis au dîner
+        if (!assignedPerDay[dayIndex]?.lunch) {
+          kind = "dejeuner"
+        } else {
+          kind = "diner"
+        }
+      }
+
+      if (!assignedPerDay[dayIndex]) assignedPerDay[dayIndex] = {}
+      if (kind === "dejeuner") assignedPerDay[dayIndex].lunch = true
+      else assignedPerDay[dayIndex].dinner = true
+      results.push({
+        date: dateStr,
+        kind,
+        mealName: dishName,
+      })
+    }
+  }
+
+  return results
 }
 
 /**

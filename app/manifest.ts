@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next"
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "PlanifIA — Planning & Recettes",
-    short_name: "PlanifIA",
+    name: "MyPlanifAI — Planning & Recettes",
+    short_name: "MyPlanifAI",
     description: "Planifiez vos repas et listes de courses en famille.",
     start_url: "/semaine",
     display: "standalone",

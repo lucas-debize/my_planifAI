@@ -60,17 +60,22 @@ export function AuthScreen({
   }
 
   return (
-    <main className="flex min-h-dvh flex-col items-center justify-center bg-bg px-6 py-12">
-      <div className="w-full max-w-sm">
-        <h1 className="font-fraunces text-4xl text-ink">MyPlanifAI</h1>
-        <p className="mt-2 text-base text-muted-foreground">
+    <main className="flex min-h-dvh flex-col items-center justify-center bg-bg px-4 py-12">
+      <div className="w-full max-w-sm rounded-2xl border border-line/70 bg-surface/90 p-6 sm:p-8 shadow-sm backdrop-blur-md">
+        <div className="flex items-center gap-2">
+          <h1 className="font-fraunces text-3xl font-bold tracking-tight text-ink">PlanifIA</h1>
+          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
+            2026
+          </span>
+        </div>
+        <p className="mt-1 text-sm text-muted-foreground font-medium">
           Déjeuner et dîner, semaine après semaine.
         </p>
 
-        <div className="mt-8 flex flex-col gap-4">
+        <div className="mt-6 flex flex-col gap-4">
           {savedAccounts.length > 0 ? (
             <div className="flex flex-col gap-2">
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Comptes sur cet appareil
               </p>
               {savedAccounts.map((account) => (
@@ -79,44 +84,46 @@ export function AuthScreen({
                   <Button
                     type="submit"
                     variant="outline"
-                    className="w-full min-h-12 justify-start"
+                    className="tap-press w-full min-h-11 justify-start rounded-xl font-medium"
                   >
-                    <span className="min-w-0 flex-1 truncate text-left">
+                    <span className="min-w-0 flex-1 truncate text-left text-sm">
                       {account.email}
                     </span>
                   </Button>
                 </form>
               ))}
-              <p className="text-sm text-muted-foreground">ou un autre compte</p>
+              <div className="relative my-1">
+                <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-line/80" /></div>
+                <div className="relative flex justify-center text-xs uppercase"><span className="bg-surface px-2 text-muted-foreground text-[10px] font-bold">ou un autre compte</span></div>
+              </div>
             </div>
           ) : null}
 
           {supabaseReady ? (
-            <Button asChild className="w-full min-h-12">
+            <Button asChild className="tap-press w-full min-h-12 rounded-xl font-semibold shadow-xs">
               <a href="/auth/google">
                 <GoogleMark />
                 Continuer avec Google
               </a>
             </Button>
           ) : (
-            <Button type="button" className="w-full min-h-12" disabled>
+            <Button type="button" className="w-full min-h-12 rounded-xl" disabled>
               <GoogleMark />
               Continuer avec Google
             </Button>
           )}
           {!supabaseReady ? (
-            <p className="text-sm text-muted-foreground">
-              Ajoute l’URL et la clé publique Supabase dans `.env.local` pour
-              activer Google.
+            <p className="text-xs text-muted-foreground">
+              Ajoute l’URL et la clé publique Supabase dans `.env.local` pour activer Google.
             </p>
           ) : null}
 
           {devBypass ? (
             <div className="flex flex-col gap-2">
-              <Button asChild variant="outline" className="w-full min-h-12">
+              <Button asChild variant="outline" className="tap-press w-full min-h-11 rounded-xl font-medium">
                 <a href="/auth/dev">Continuer en mode développement</a>
               </Button>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-[11px] text-muted-foreground">
                 Compte local : dev@planifia.local — hors de ton espace Google.
               </p>
             </div>

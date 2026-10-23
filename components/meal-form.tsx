@@ -273,6 +273,8 @@ export function MealForm({
           value={name}
           maxLength={80}
           required
+          placeholder="ex: Poulet basquaise, Salade niçoise..."
+          className="min-h-11 rounded-xl border-line/80 bg-surface shadow-2xs text-base font-semibold focus-visible:ring-primary/30"
           onChange={(event) => setName(event.target.value)}
         />
       </div>
@@ -385,6 +387,7 @@ export function MealForm({
           id="ingredient-draft"
           value={draft}
           placeholder="ex: 200g farine, 3 oeufs, 1 c. à soupe d'huile..."
+          className="min-h-11 rounded-xl border-line/80 bg-surface shadow-2xs text-sm focus-visible:ring-primary/30"
           onChange={(event) => {
             setDraft(event.target.value)
             setOpen(true)
@@ -437,18 +440,18 @@ export function MealForm({
         </div>
       ) : null}
 
-      <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+      <div className="flex flex-col gap-2.5 sm:flex-row sm:justify-end pt-2">
         {onCancel ? (
           <Button
             type="button"
             variant="outline"
-            className="min-h-12"
+            className="tap-press min-h-11 sm:min-h-12 rounded-xl font-medium"
             onClick={onCancel}
           >
             Annuler
           </Button>
         ) : null}
-        <Button type="submit" className="min-h-12" disabled={pending}>
+        <Button type="submit" className="tap-press min-h-11 sm:min-h-12 rounded-xl font-semibold shadow-xs px-6" disabled={pending}>
           {pending ? (
             <>
               <Loader2 className="mr-2 size-4 animate-spin" />

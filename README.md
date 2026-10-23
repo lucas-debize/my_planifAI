@@ -33,15 +33,15 @@ L'application tourne gratuitement 24h/24 sans mise en veille :
 
 ### Étape 2 : Google Cloud OAuth (5 min)
 
-1. Rends-toi sur la [Google Cloud Console](https://console.cloud.google.com/) et crée un nouveau projet (ex: *PlanifIA*).
+1. Rends-toi sur la [Google Cloud Console](https://console.cloud.google.com/) et crée un nouveau projet (ex: *MyPlanifAI*).
 2. Va dans **APIs & Services → OAuth consent screen** :
    - User Type : **External**
-   - Nom de l'application : `PlanifIA`
+  - Nom de l'application : `MyPlanifAI`
    - Scopes demandés : `openid`, `.../auth/userinfo.email`, `.../auth/userinfo.profile`
    - En phase de test, ajoute tes adresses Gmail dans **Test users** (ou publie l'écran, gratuit pour ces 3 scopes standards).
 3. Va dans **APIs & Services → Credentials → Create Credentials → OAuth client ID** :
    - Application type : **Web application**
-   - Nom : `PlanifIA Web`
+  - Nom : `MyPlanifAI Web`
    - **Authorized redirect URIs** :
      `https://<id-projet>.supabase.co/auth/v1/callback`
      *(trouvable aussi dans Supabase → Authentication → Providers → Google)*
@@ -135,6 +135,6 @@ La page **Compte** affiche l’e-mail réel du compte connecté (Google, lien ma
 
 **Ajouter un compte Google** lance un nouvel OAuth (`prompt=select_account`) sans jeter les comptes déjà mémorisés sur l’appareil. Chaque identité Google a son propre espace repas / semaine / courses (RLS).
 
-La liste locale (e-mail, nom, photo) est un cookie HttpOnly. Le jeton de session de chaque compte est stocké à part, aussi en HttpOnly, pour basculer sans retaper Google. S’il est expiré, PlanifIA relance Google avec `login_hint`.
+La liste locale (e-mail, nom, photo) est un cookie HttpOnly. Le jeton de session de chaque compte est stocké à part, aussi en HttpOnly, pour basculer sans retaper Google. S’il est expiré, MyPlanifAI relance Google avec `login_hint`.
 
 **Déconnexion** quitte seulement le compte actuel et passe au suivant s’il y en a un. **Tout déconnecter** vide la liste de l’appareil.

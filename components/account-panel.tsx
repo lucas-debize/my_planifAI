@@ -209,8 +209,8 @@ function FamilySection({
       ? `${window.location.origin}/compte?join=${family.invite_code}`
       : `https://myplanifai.vercel.app/compte?join=${family.invite_code}`
 
-  const mailSubject = `Rejoins notre groupe ${family.name} sur PlanifIA`
-  const mailBody = `Salut !\n\nRejoins notre planning de repas familial "${family.name}" sur PlanifIA pour partager menus, idées de recettes et listes de courses en un clic :\n\n👉 Clique ici pour nous rejoindre : ${inviteUrl}\n\n(Ou entre directement le code d'invitation : ${family.invite_code})\n\nÀ tout de suite !`
+  const mailSubject = `Rejoins notre groupe ${family.name} sur MyPlanifAI`
+  const mailBody = `Salut !\n\nRejoins notre planning de repas familial "${family.name}" sur MyPlanifAI pour partager menus, idées de recettes et listes de courses en un clic :\n\n👉 Clique ici pour nous rejoindre : ${inviteUrl}\n\n(Ou entre directement le code d'invitation : ${family.invite_code})\n\nÀ tout de suite !`
   const mailtoHref = `mailto:?subject=${encodeURIComponent(mailSubject)}&body=${encodeURIComponent(mailBody)}`
 
   return (
@@ -393,7 +393,7 @@ export function AccountPanel({
         {current ? (
           <section className="flex flex-col gap-2">
             <h2 className="text-sm text-muted-foreground">Compte actuel</h2>
-            <div className="flex items-center gap-3 rounded-[0.75rem] border border-primary bg-primary/10 px-3 py-3">
+            <div className="flex items-center gap-3 rounded-2xl border border-primary/30 bg-primary/10 px-3.5 py-3 shadow-2xs">
               <AccountAvatar account={current} />
               <AccountDetails account={current} />
             </div>
@@ -420,12 +420,12 @@ export function AccountPanel({
                     <input type="hidden" name="accountId" value={account.id} />
                     <button
                       type="submit"
-                      className="flex w-full min-h-12 items-center gap-3 rounded-[0.75rem] border border-line bg-surface px-3 py-2 text-left hover:bg-muted"
+                      className="tap-press flex w-full min-h-12 items-center gap-3 rounded-xl border border-line bg-surface px-3 py-2 text-left hover:bg-muted shadow-2xs transition-colors"
                     >
                       <AccountAvatar account={account} />
                       <AccountDetails account={account} />
-                      <span className="shrink-0 text-sm text-muted-foreground">
-                        Utiliser
+                      <span className="shrink-0 text-xs font-semibold text-primary">
+                        Basculer
                       </span>
                     </button>
                   </form>
@@ -437,7 +437,7 @@ export function AccountPanel({
 
         {supabaseReady ? (
           <form action={addGoogleAccount}>
-            <Button type="submit" variant="outline" className="min-h-12">
+            <Button type="submit" variant="outline" className="tap-press min-h-12 w-full rounded-xl font-semibold shadow-2xs">
               <GoogleMark />
               Ajouter un compte Google
             </Button>
@@ -465,9 +465,9 @@ export function AccountPanel({
                 key={item.value}
                 type="button"
                 className={cn(
-                  "min-h-12 rounded-[0.75rem] border px-3 text-sm font-medium transition-colors",
+                  "tap-press min-h-11 rounded-xl border px-3 text-sm font-semibold transition-all shadow-2xs",
                   mounted && theme === item.value
-                    ? "border-primary bg-primary text-primary-foreground font-semibold"
+                    ? "border-primary bg-primary text-primary-foreground shadow-xs"
                     : "border-line bg-surface hover:bg-muted text-ink"
                 )}
                 onClick={() => setTheme(item.value)}
@@ -502,13 +502,13 @@ export function AccountPanel({
 
         <div className="flex flex-col gap-2 sm:flex-row">
           <form action={signOut}>
-            <Button type="submit" variant="outline" className="min-h-12">
+            <Button type="submit" variant="outline" className="tap-press min-h-11 rounded-xl font-medium">
               Déconnexion
             </Button>
           </form>
           {showSignOutAll ? (
             <form action={signOutAll}>
-              <Button type="submit" variant="ghost" className="min-h-12">
+              <Button type="submit" variant="ghost" className="tap-press min-h-11 rounded-xl font-medium text-destructive hover:bg-destructive/10">
                 Tout déconnecter
               </Button>
             </form>

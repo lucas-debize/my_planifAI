@@ -1,5 +1,5 @@
 -- ==============================================================================
--- PlanifIA - Setup complet de la base de données Supabase
+-- MyPlanifAI - Setup complet de la base de données Supabase
 -- Exécuter ce script en une seule fois dans le SQL Editor de Supabase
 -- ==============================================================================
 

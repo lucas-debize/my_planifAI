@@ -17,11 +17,11 @@ const sourceSans = Source_Sans_3({
 })
 
 export const metadata: Metadata = {
-  title: "PlanifIA",
+  title: "MyPlanifAI",
   description: "Déjeuner et dîner, semaine après semaine.",
   appleWebApp: {
     capable: true,
-    title: "PlanifIA",
+    title: "MyPlanifAI",
     statusBarStyle: "default",
   },
   icons: {

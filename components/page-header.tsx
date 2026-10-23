@@ -6,43 +6,44 @@ export function PageHeader({
   actions,
   backHref,
   backLabel = "Retour",
-  hideAccount = false,
+  showWorkspace = true,
 }: {
   title: string
   actions?: React.ReactNode
   backHref?: string
   backLabel?: string
   hideAccount?: boolean
+  showWorkspace?: boolean
 }) {
-  const showAccount = !hideAccount && title !== "Compte"
+  const isRootPage = !backHref && showWorkspace && title !== "Compte"
 
   return (
-    <header className="flex items-center gap-2 px-4 py-4 sm:gap-3 md:px-8">
-      {backHref ? (
-        <Link
-          href={backHref}
-          className="tap-press inline-flex size-10 shrink-0 items-center justify-center rounded-[0.75rem] text-ink hover:bg-muted"
-          aria-label={backLabel}
-        >
-          <ArrowLeft className="size-5" />
-        </Link>
-      ) : null}
-      <h1 className="min-w-0 flex-1 truncate font-fraunces text-xl text-ink sm:text-2xl md:text-3xl">
-        {title}
-      </h1>
-      <div className="flex shrink-0 items-center gap-2">
-        {actions}
-        <WorkspaceSwitcher compact className="md:hidden" />
-        {showAccount ? (
+    <header className="flex items-center justify-between gap-2 px-4 py-3 md:px-8 border-b border-line/40 bg-bg/50">
+      <div className="flex min-w-0 items-center gap-2">
+        {backHref ? (
           <Link
-            href="/compte"
-            className="tap-press inline-flex size-10 items-center justify-center rounded-[0.75rem] text-ink hover:bg-muted sm:size-12 md:hidden"
-            aria-label="Compte"
+            href={backHref}
+            className="tap-press inline-flex size-9 shrink-0 items-center justify-center rounded-xl border border-line/60 bg-surface text-ink hover:bg-muted shadow-2xs transition-colors"
+            aria-label={backLabel}
           >
-            <UserRound className="size-5" />
+            <ArrowLeft className="size-4.5" />
           </Link>
         ) : null}
+        <div className="flex min-w-0 items-center gap-2">
+          <h1 className="truncate font-fraunces text-xl font-bold tracking-tight text-ink sm:text-2xl md:text-3xl">
+            {title}
+          </h1>
+          {isRootPage ? (
+            <WorkspaceSwitcher compact className="md:hidden shrink-0" />
+          ) : null}
+        </div>
       </div>
+
+      {actions ? (
+        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+          {actions}
+        </div>
+      ) : null}
     </header>
   )
 }

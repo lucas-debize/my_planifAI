@@ -37,7 +37,7 @@ export async function GET(
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="planifia-${weekStart}.pdf"`,
+      "Content-Disposition": `attachment; filename="myplanifia-${weekStart}.pdf"`,
       "Cache-Control": "no-store",
     },
   })

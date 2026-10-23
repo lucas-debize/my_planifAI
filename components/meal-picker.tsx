@@ -377,7 +377,7 @@ export function MealPicker({
         data-vaul-no-drag
       />
 
-      <ScrollArea className="h-64" data-vaul-no-drag>
+      <ScrollArea className="h-60 max-h-60 overflow-hidden rounded-xl border border-line/50 p-1" data-vaul-no-drag>
         {filtered.length === 0 ? (
           query.trim() ? (
             <div className="flex flex-col items-center justify-center gap-3 px-2 py-8 text-center">
@@ -459,11 +459,10 @@ export function MealPicker({
   )
 
   const footer = creating ? null : (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2 pt-2">
       <Button
         asChild
-        variant="outline"
-        className="min-h-12"
+        className="tap-press min-h-12 w-full rounded-xl font-semibold shadow-xs"
       >
         <Link
           href={`/idees/nouvelle?date=${date}&kind=${kind}${query.trim() ? `&nom=${encodeURIComponent(query.trim())}` : ""}`}
@@ -475,8 +474,8 @@ export function MealPicker({
       {currentMeal ? (
         <Button
           type="button"
-          variant="ghost"
-          className="min-h-12"
+          variant="outline"
+          className="tap-press min-h-11 w-full rounded-xl text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/20 font-medium"
           onClick={() => assign(null, "normal")}
         >
           Vider ce créneau
@@ -494,12 +493,12 @@ export function MealPicker({
           if (!next) reset()
         }}
       >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
+        <DialogContent className="max-w-md max-h-[85vh] flex flex-col p-6 overflow-hidden rounded-2xl shadow-xl">
+          <DialogHeader className="pb-2 shrink-0">
             <DialogTitle className="font-fraunces text-xl">{title}</DialogTitle>
           </DialogHeader>
-          {body}
-          {footer}
+          <div className="flex-1 min-h-0 flex flex-col">{body}</div>
+          {footer ? <div className="shrink-0 pt-3 border-t border-line/60">{footer}</div> : null}
         </DialogContent>
       </Dialog>
     )
@@ -513,12 +512,12 @@ export function MealPicker({
         if (!next) reset()
       }}
     >
-      <DrawerContent>
-        <DrawerHeader>
+      <DrawerContent className="max-h-[90vh] flex flex-col">
+        <DrawerHeader className="pb-2">
           <DrawerTitle className="font-fraunces text-xl">{title}</DrawerTitle>
         </DrawerHeader>
-        <div className="px-4">{body}</div>
-        {footer ? <DrawerFooter>{footer}</DrawerFooter> : null}
+        <div className="flex-1 overflow-y-auto px-4 pb-2">{body}</div>
+        {footer ? <DrawerFooter className="pt-1 pb-[calc(1rem+env(safe-area-inset-bottom))] px-4">{footer}</DrawerFooter> : null}
       </DrawerContent>
     </Drawer>
   )

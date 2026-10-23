@@ -42,6 +42,7 @@ import {
 } from "@/lib/ai/recipe-extractor"
 import type { MealWithIngredients } from "@/lib/domain/meals"
 import { actionErrorMessage } from "@/lib/errors"
+import { optimizeImageForOcr } from "@/lib/images/optimize"
 import { cn } from "@/lib/utils"
 
 export function MagicRecipeDialog({
@@ -96,15 +97,16 @@ export function MagicRecipeDialog({
     setIsSaving(false)
   }
 
-  function handleFileSelected(file: File | undefined) {
+  async function handleFileSelected(file: File | undefined) {
     if (!file) return
     if (!file.type.startsWith("image/")) {
       toast.error("Veuillez sélectionner un fichier image valide.")
       return
     }
+    const optimized = await optimizeImageForOcr(file)
     if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl)
-    const url = URL.createObjectURL(file)
-    setPhotoFile(file)
+    const url = URL.createObjectURL(optimized)
+    setPhotoFile(optimized)
     setPhotoPreviewUrl(url)
     setPreviewBatch(null)
     setSelectedIndices(new Set())
@@ -425,9 +427,9 @@ export function MagicRecipeDialog({
             type="button"
             variant="outline"
             size="sm"
-            className="gap-1.5 text-xs font-medium text-primary hover:text-primary"
+            className="tap-press min-h-10 gap-1.5 rounded-xl border-primary/30 bg-primary/10 text-xs font-semibold text-primary hover:bg-primary/20 shadow-2xs transition-all sm:min-h-11 sm:text-sm"
           >
-            <Sparkles className="size-3.5 text-primary" />
+            <Sparkles className="size-4 text-primary" />
             <span>Import magique IA</span>
           </Button>
         )}

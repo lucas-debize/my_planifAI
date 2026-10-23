@@ -23,40 +23,49 @@ async function transcribeImage(
   const geminiKey = process.env.GEMINI_API_KEY
   if (geminiKey) {
     try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
+      const models = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-flash-latest"]
+      let text: string | undefined
+      for (const model of models) {
+        try {
+          const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents: [
                   {
-                    inlineData: {
-                      mimeType,
-                      data: buffer.toString("base64"),
-                    },
-                  },
-                  {
-                    text:
-                      "Tu es un assistant culinaire expert. Analyse attentivement cette photo et identifie sa nature :\n\nCas A : La photo montre une RECETTE UNIQUE détaillée avec des ingrédients (ex: livre de cuisine, fiche recette).\n-> Retranscris fidèlement le titre exact et la TOTALITÉ des ingrédients avec leurs quantités sans rien résumer, modifier ni tronquer.\nFormat :\n[Titre de la recette]\nIngrédients :\n- [quantité] [nom]\n\nCas B : La photo montre un PLANNING DE REPAS ou une LISTE DE PLATS (ex: semainier, tableau de repas, menu).\n-> Extrais tous les plats distincts (sans inclure les jours dans le titre) sous ce format :\n=== PLAT : [Nom du plat 1] ===\nIngrédients :\n- [quantité] [nom]\n\n=== PLAT : [Nom du plat 2] ===\nIngrédients :\n- [quantité] [nom]\nPour chaque plat sans ingrédients, génère une recette par défaut équilibrée (3 à 5 ingrédients courants avec quantités).\n\nCas C : La photo montre un PLAT UNIQUE sans liste d'ingrédients.\n-> Extrais le titre et propose une recette par défaut (3 à 5 ingrédients avec quantités).\nFormat :\n[Titre]\nIngrédients :\n- [quantité] [nom]\n\nÉcris uniquement le texte au format indiqué sans bla-bla.",
+                    parts: [
+                      {
+                        inlineData: {
+                          mimeType,
+                          data: buffer.toString("base64"),
+                        },
+                      },
+                      {
+                        text:
+                          "Tu es un assistant culinaire expert. Analyse attentivement cette photo et identifie sa nature :\n\nCas A : La photo montre une RECETTE UNIQUE détaillée avec des ingrédients (ex: livre de cuisine, fiche recette).\n-> Retranscris fidèlement le titre exact et la TOTALITÉ des ingrédients avec leurs quantités sans rien résumer, modifier ni tronquer.\nFormat :\n[Titre de la recette]\nIngrédients :\n- [quantité] [nom]\n\nCas B : La photo montre un PLANNING DE REPAS ou une LISTE DE PLATS (ex: semainier, tableau de repas, menu).\n-> Extrais tous les plats distincts sous ce format :\nLundi midi : [Nom du plat]\nLundi soir : [Nom du plat]\nou\n=== PLAT : [Nom du plat 1] ===\nIngrédients :\n- [quantité] [nom]\n=== PLAT : [Nom du plat 2] ===\nIngrédients :\n- [quantité] [nom]\nPour chaque plat sans ingrédients, génère une recette par défaut équilibrée (3 à 5 ingrédients avec quantités).\n\nCas C : PLAT UNIQUE sans ingrédients.\n-> Extrais le titre et génère 3 à 5 ingrédients essentiels avec quantités.",
+                      },
+                    ],
                   },
                 ],
-              },
-            ],
-          }),
-          signal: AbortSignal.timeout(15000),
-        }
-      )
-
-      if (response.ok) {
-        const data = await response.json()
-        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text
-        if (typeof text === "string" && text.trim().length > 0) {
-          return text.trim()
+              }),
+              signal: AbortSignal.timeout(20000),
+            }
+          )
+          if (response.ok) {
+            const data = await response.json()
+            const candText = data?.candidates?.[0]?.content?.parts?.[0]?.text
+            if (typeof candText === "string" && candText.trim().length > 0) {
+              text = candText.trim()
+              break
+            }
+          }
+        } catch {
+          // Essayer le modèle suivant
         }
       }
+      if (text) return text
     } catch {
       // En cas d'erreur de clé ou réseau Gemini, repli vers OpenAI ou Tesseract
     }
@@ -109,9 +118,25 @@ async function transcribeImage(
     }
   }
 
-  // 3. Mode OCR local (Tesseract.js) sans configuration
-  const result = await Tesseract.recognize(buffer, "fra")
-  return result.data.text.trim()
+  // 3. Mode OCR local (Tesseract.js)
+  try {
+    const result = await Tesseract.recognize(buffer, "fra")
+    const text = result?.data?.text?.trim()
+    if (text && text.length > 0) return text
+  } catch {
+    // Repli vers anglais si le dictionnaire français a échoué
+    try {
+      const result = await Tesseract.recognize(buffer, "eng")
+      return result?.data?.text?.trim() ?? ""
+    } catch (ocrErr) {
+      throw new Error(
+        ocrErr instanceof Error
+          ? `Échec de l'OCR local : ${ocrErr.message}`
+          : "Impossible d'analyser l'image en local."
+      )
+    }
+  }
+  return ""
 }
 
 export async function extractRecipeFromImageAction(

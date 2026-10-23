@@ -1,6 +1,6 @@
-# Guide Technique : Déploiement de PlanifIA sur l'App Store Apple (via Capacitor)
+# Guide Technique : Déploiement de MyPlanifAI sur l'App Store Apple (via Capacitor)
 
-Ce document décrit l'architecture, la faisabilité et les étapes pas-à-pas pour transformer PlanifIA en application native iOS téléchargeable directement sur l'App Store d'Apple.
+Ce document décrit l'architecture, la faisabilité et les étapes pas-à-pas pour transformer MyPlanifAI en application native iOS téléchargeable directement sur l'App Store d'Apple.
 
 ---
 
@@ -33,7 +33,7 @@ Ce document décrit l'architecture, la faisabilité et les étapes pas-à-pas po
 │  │               Capacitor Container                │  │
 │  │  ┌────────────────────────────────────────────┐  │  │
 │  │  │            WKWebView iOS (Apple)           │  │  │
-│  │  │  PlanifIA UI & Logique                     │  │  │
+│  │  │  MyPlanifAI UI & Logique                   │  │  │
 │  │  │  - Next.js / React 19                      │  │  │
 │  │  │  - Synchronisation Supabase Temps Réel     │  │  │
 │  │  └────────────────────────────────────────────┘  │  │
@@ -52,7 +52,7 @@ Ce document décrit l'architecture, la faisabilité et les étapes pas-à-pas po
 1. **Compte Apple Developer Program** :
    - Inscription sur [developer.apple.com](https://developer.apple.com/).
    - Coût : **99 USD par an**.
-   - Permet de créer un Bundle Identifier (ex: `com.planifia.app`) et de signer les certificats.
+   - Permet de créer un Bundle Identifier (ex: `com.myplanifia.app`) et de signer les certificats.
 2. **Mac avec Xcode** :
    - macOS récent avec Xcode installé depuis le Mac App Store.
 3. **Identité visuelle de l'app** :
@@ -68,7 +68,7 @@ Dans le terminal du projet :
 
 ```bash
 bun add @capacitor/core @capacitor/cli @capacitor/ios
-bun x cap init "PlanifIA" "com.planifia.app" --web-dir "out"
+bun x cap init "MyPlanifAI" "com.myplanifia.app" --web-dir "out"
 ```
 
 ### Étape 2 : Configurer `capacitor.config.ts`
@@ -79,8 +79,8 @@ Créer ou ajuster `capacitor.config.ts` à la racine :
 import type { CapacitorConfig } from "@capacitor/cli"
 
 const config: CapacitorConfig = {
-  appId: "com.planifia.app",
-  appName: "PlanifIA",
+  appId: "com.myplanifia.app",
+  appName: "MyPlanifAI",
   webDir: "out",
   server: {
     // En production, Capacitor peut charger directement l'URL Vercel

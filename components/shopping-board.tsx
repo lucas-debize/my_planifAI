@@ -45,8 +45,11 @@ export function ShoppingBoard({
     [hideChecked, lines]
   )
 
-  const aisleGroups = useMemo(() => groupItemsByAisle(visible), [visible])
+  const totalCount = lines.length
+  const checkedCount = lines.filter((l) => l.checked).length
+  const progressPercent = totalCount > 0 ? Math.round((checkedCount / totalCount) * 100) : 0
 
+  const aisleGroups = useMemo(() => groupItemsByAisle(visible), [visible])
   function refresh() {
     startTransition(() => router.refresh())
   }
@@ -170,19 +173,22 @@ export function ShoppingBoard({
     const editing = editingId === line.ingredientId
     return (
       <li key={line.ingredientId}>
-        <div className="flex min-h-12 items-center gap-2 rounded-[0.75rem] px-2 hover:bg-surface/80">
-          <Checkbox
-            checked={line.checked}
-            onCheckedChange={(value) => void onToggle(line, value === true)}
-            aria-label={line.name}
-          />
+        <div className="flex min-h-11 items-center gap-2.5 rounded-xl px-2.5 py-1 transition-colors hover:bg-muted/50 group">
+          <div className="flex size-7 shrink-0 items-center justify-center">
+            <Checkbox
+              checked={line.checked}
+              onCheckedChange={(value) => void onToggle(line, value === true)}
+              aria-label={line.name}
+              className="size-5 rounded-md border-line/90 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+            />
+          </div>
           {editing ? (
             <Input
               value={editValue}
               autoFocus
               maxLength={80}
               aria-label={`Modifier ${line.name}`}
-              className="min-h-10 flex-1"
+              className="min-h-9 flex-1 text-sm rounded-lg"
               onChange={(event) => setEditValue(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
@@ -197,8 +203,8 @@ export function ShoppingBoard({
             <button
               type="button"
               className={cn(
-                "tap-press min-h-10 flex-1 min-w-0 rounded-[0.5rem] px-1 text-left break-words line-clamp-2 leading-snug",
-                line.checked && "text-muted-foreground line-through"
+                "tap-press min-h-9 flex-1 min-w-0 rounded-md px-1 text-left break-words line-clamp-2 text-sm sm:text-base leading-snug font-medium transition-all",
+                line.checked ? "text-muted-foreground line-through opacity-60" : "text-ink"
               )}
               onClick={() => startEdit(line)}
             >
@@ -207,20 +213,20 @@ export function ShoppingBoard({
           )}
           <button
             type="button"
-            className="tap-press inline-flex size-10 shrink-0 items-center justify-center rounded-[0.75rem] hover:bg-muted"
+            className="tap-press inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground/60 hover:text-ink hover:bg-muted transition-colors opacity-0 group-hover:opacity-100 sm:opacity-100"
             aria-label={`Modifier ${line.name}`}
             onClick={() => startEdit(line)}
           >
-            <Pencil className="size-4" aria-hidden />
+            <Pencil className="size-3.5" aria-hidden />
           </button>
           {line.extra ? (
             <button
               type="button"
-              className="tap-press inline-flex size-10 shrink-0 items-center justify-center rounded-[0.75rem] text-destructive hover:bg-muted"
+              className="tap-press inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 transition-colors"
               aria-label={`Retirer ${line.name}`}
               onClick={() => void onRemove(line)}
             >
-              <Trash2 className="size-4" aria-hidden />
+              <Trash2 className="size-3.5" aria-hidden />
             </button>
           ) : null}
         </div>
@@ -240,45 +246,87 @@ export function ShoppingBoard({
           hrefFor={(iso) => `/courses?semaine=${iso}`}
         />
 
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex min-h-10 items-center gap-2.5">
-            <Switch
-              id="hide-checked"
-              checked={hideChecked}
-              onCheckedChange={setHideChecked}
-            />
-            <Label htmlFor="hide-checked" className="cursor-pointer text-sm font-medium">
-              Masquer les cochés
-            </Label>
-          </div>
+        <div className="mt-4 flex flex-col gap-3">
+          {/* Barre de progression des courses */}
+          {totalCount > 0 ? (
+            <div className="flex flex-col gap-1.5 rounded-xl border border-line/60 bg-surface p-3 shadow-2xs">
+              <div className="flex items-center justify-between text-xs font-semibold">
+                <span className="text-muted-foreground">Articles cochés</span>
+                <span className="text-primary font-bold">{checkedCount} / {totalCount} ({progressPercent}%)</span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full bg-primary transition-all duration-300 rounded-full"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+            </div>
+          ) : null}
 
-          <div className="inline-flex rounded-xl bg-muted/70 p-1 text-xs font-medium">
+          {/* Formulaire d'ajout rapide au sommet */}
+          <form
+            className="flex w-full items-center gap-2"
+            onSubmit={(event) => void onAdd(event)}
+          >
+            <Input
+              value={draft}
+              maxLength={80}
+              placeholder="Ajouter un article rapide (ex: Café, Lait...)"
+              aria-label="Ajouter un article"
+              className="flex-1 min-w-0 min-h-11 rounded-xl border-line/80 bg-surface shadow-2xs text-sm"
+              onChange={(event) => setDraft(event.target.value)}
+            />
             <button
-              type="button"
-              className={cn(
-                "flex items-center gap-1.5 rounded-lg px-2.5 py-1 transition-all",
-                viewMode === "aisles"
-                  ? "bg-card text-ink shadow-xs font-semibold"
-                  : "text-muted-foreground hover:text-ink"
-              )}
-              onClick={() => setViewMode("aisles")}
+              type="submit"
+              disabled={pending || !draft.trim()}
+              className="tap-press inline-flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 shadow-2xs transition-all font-semibold"
+              aria-label="Ajouter"
             >
-              <Sparkles className="size-3.5 text-primary" />
-              <span>Par rayon</span>
+              <Plus className="size-5" aria-hidden />
             </button>
-            <button
-              type="button"
-              className={cn(
-                "flex items-center gap-1.5 rounded-lg px-2.5 py-1 transition-all",
-                viewMode === "alpha"
-                  ? "bg-card text-ink shadow-xs font-semibold"
-                  : "text-muted-foreground hover:text-ink"
-              )}
-              onClick={() => setViewMode("alpha")}
-            >
-              <ArrowDownAZ className="size-3.5" />
-              <span>A à Z</span>
-            </button>
+          </form>
+
+          {/* Filtres et modes d'affichage */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+            <div className="flex min-h-10 items-center gap-2.5">
+              <Switch
+                id="hide-checked"
+                checked={hideChecked}
+                onCheckedChange={setHideChecked}
+              />
+              <Label htmlFor="hide-checked" className="cursor-pointer text-xs sm:text-sm font-medium">
+                Masquer les cochés ({checkedCount})
+              </Label>
+            </div>
+
+            <div className="inline-flex rounded-xl bg-muted/70 p-1 text-xs font-medium">
+              <button
+                type="button"
+                className={cn(
+                  "tap-press flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition-all",
+                  viewMode === "aisles"
+                    ? "bg-card text-ink shadow-2xs font-bold"
+                    : "text-muted-foreground hover:text-ink"
+                )}
+                onClick={() => setViewMode("aisles")}
+              >
+                <Sparkles className="size-3.5 text-primary" />
+                <span>Par rayon</span>
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  "tap-press flex items-center gap-1.5 rounded-lg px-3 py-1.5 transition-all",
+                  viewMode === "alpha"
+                    ? "bg-card text-ink shadow-2xs font-bold"
+                    : "text-muted-foreground hover:text-ink"
+                )}
+                onClick={() => setViewMode("alpha")}
+              >
+                <ArrowDownAZ className="size-3.5" />
+                <span>A à Z</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -296,22 +344,22 @@ export function ShoppingBoard({
             return (
               <section
                 key={aisle.key}
-                className="rounded-[1rem] border border-line bg-surface/60 p-3 shadow-xs"
+                className="rounded-2xl border border-line/60 bg-surface/80 p-3.5 shadow-2xs transition-all"
               >
-                <header className="mb-1 flex items-center justify-between px-1">
+                <header className="mb-2 flex items-center justify-between px-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-base" aria-hidden>
+                    <span className="text-lg" aria-hidden>
                       {aisle.icon}
                     </span>
-                    <h2 className="font-fraunces text-base font-semibold text-ink">
+                    <h2 className="font-fraunces text-base font-bold text-ink">
                       {aisle.label}
                     </h2>
                   </div>
-                  <span className="text-xs text-muted-foreground font-medium">
+                  <span className="text-xs text-muted-foreground font-semibold rounded-full bg-muted px-2 py-0.5">
                     {checkedCount} / {items.length}
                   </span>
                 </header>
-                <ul className="flex flex-col gap-0.5">
+                <ul className="flex flex-col divide-y divide-line/30">
                   {items.map((line) => renderLineItem(line))}
                 </ul>
               </section>
@@ -324,27 +372,8 @@ export function ShoppingBoard({
         </ul>
       )}
 
-      <form
-        className="mt-6 flex w-full items-center gap-2 px-4 pb-8 md:px-8"
-        onSubmit={(event) => void onAdd(event)}
-      >
-        <Input
-          value={draft}
-          maxLength={80}
-          placeholder="Ajouter un article"
-          aria-label="Ajouter un article"
-          className="flex-1 min-w-0"
-          onChange={(event) => setDraft(event.target.value)}
-        />
-        <button
-          type="submit"
-          disabled={pending}
-          className="tap-press inline-flex size-12 shrink-0 items-center justify-center rounded-[0.75rem] bg-primary text-primary-foreground hover:bg-primary/80 disabled:opacity-50"
-          aria-label="Ajouter"
-        >
-          <Plus className="size-5" aria-hidden />
-        </button>
-      </form>
+      {/* Espace bas pour assurer le scroll au-dessus de la nav mobile */}
+      <div className="h-6" />
     </>
   )
 }

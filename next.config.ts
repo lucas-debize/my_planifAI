@@ -9,7 +9,14 @@ const nextConfig: NextConfig = {
     "@react-pdf/image",
     "@react-pdf/png-js",
     "yoga-layout",
+    "tesseract.js",
+    "tesseract.js-core",
   ],
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "12mb",
+    },
+  },
   async headers() {
     return [
       {
@@ -23,7 +30,7 @@ const nextConfig: NextConfig = {
           },
           {
             key: "Permissions-Policy",
-            value: "camera=(), microphone=(), geolocation=()",
+            value: "camera=(self), microphone=(), geolocation=()",
           },
         ],
       },
