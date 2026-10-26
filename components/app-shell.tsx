@@ -8,6 +8,7 @@ import {
   ShoppingBasket,
   UserRound,
 } from "lucide-react"
+import { currentMondayIso } from "@/lib/dates"
 import { WorkspaceSwitcher } from "@/components/workspace-switcher"
 import { WorkspaceProvider } from "@/components/workspace-context"
 import type { PlanningScope } from "@/lib/domain/session"
@@ -36,13 +37,13 @@ export function AppShell({
   scope: PlanningScope
 }) {
   const pathname = usePathname()
-
+  const weekHref = `/semaine/${currentMondayIso()}`
   return (
     <WorkspaceProvider scope={scope}>
       <div className="min-h-dvh bg-bg md:flex">
         <aside className="hidden md:flex md:w-64 md:shrink-0 md:flex-col md:border-r md:border-line md:bg-surface">
           <div className="flex items-center justify-between px-5 pt-6 pb-4">
-            <Link href="/semaine" className="flex items-center gap-2 group">
+            <Link href={weekHref} prefetch={true} className="flex items-center gap-2 group">
               <span className="font-fraunces text-2xl tracking-tight text-ink group-hover:text-primary transition-colors">
                 MyPlanifAI
               </span>
@@ -61,7 +62,8 @@ export function AppShell({
               return (
                 <Link
                   key={item.href}
-                  href={item.href}
+                  href={item.href === "/semaine" ? weekHref : item.href}
+                  prefetch={true}
                   className={cn(
                     "tap-press flex min-h-11 items-center gap-3 rounded-xl px-3.5 text-sm font-medium transition-all",
                     active
@@ -92,7 +94,8 @@ export function AppShell({
               return (
                 <li key={item.href}>
                   <Link
-                    href={item.href}
+                    href={item.href === "/semaine" ? weekHref : item.href}
+                    prefetch={true}
                     className={cn(
                       "tap-press flex min-h-[3.25rem] flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-medium leading-none transition-all",
                       active

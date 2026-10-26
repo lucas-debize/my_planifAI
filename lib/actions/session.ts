@@ -1,5 +1,6 @@
 "use server"
 
+import { cache } from "react"
 import { cookies } from "next/headers"
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
@@ -8,16 +9,11 @@ import { SCOPE_COOKIE, type PlanningScope } from "@/lib/domain/session"
 import type { Database } from "@/lib/database.types"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-
 export async function revalidateApp(): Promise<void> {
   revalidatePath("/", "layout")
 }
 
-/**
- * Returns the current active planning scope (personal or family)
- * based on user's family membership and the `planifia_scope` cookie.
- */
-export async function getPlanningScope(): Promise<PlanningScope> {
+const getPlanningScopeCached = cache(async (): Promise<PlanningScope> => {
   const supabase = await createClient()
   const { data } = await supabase.auth.getClaims()
   const authUid = data?.claims?.sub
@@ -62,6 +58,15 @@ export async function getPlanningScope(): Promise<PlanningScope> {
     memberCount: 1,
     displayName: "Mon planning perso",
   }
+})
+
+/**
+ * Returns the current active planning scope (personal or family)
+ * based on user's family membership and the `planifia_scope` cookie.
+ * Request-memoized via React cache.
+ */
+export async function getPlanningScope(): Promise<PlanningScope> {
+  return getPlanningScopeCached()
 }
 
 /**
@@ -80,22 +85,27 @@ export async function switchPlanningScopeAction(
   await revalidateApp()
 }
 
-/**
- * Returns authenticated client, real authUid, and active planning scope.
- */
-export async function requireScopedContext(): Promise<{
-  supabase: SupabaseClient<Database>
-  authUid: string
-  scope: PlanningScope
-}> {
+const requireScopedContextCached = cache(async () => {
   const supabase = await createClient()
   const { data } = await supabase.auth.getClaims()
   const authUid = data?.claims?.sub
   if (!authUid || typeof authUid !== "string") {
     throw new Error("UNAUTHENTICATED")
   }
-  const scope = await getPlanningScope()
+  const scope = await getPlanningScopeCached()
   return { supabase, authUid, scope }
+})
+
+/**
+ * Returns authenticated client, real authUid, and active planning scope.
+ * Request-memoized via React cache.
+ */
+export async function requireScopedContext(): Promise<{
+  supabase: SupabaseClient<Database>
+  authUid: string
+  scope: PlanningScope
+}> {
+  return requireScopedContextCached()
 }
 
 /**

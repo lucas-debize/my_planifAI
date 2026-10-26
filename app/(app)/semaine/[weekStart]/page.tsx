@@ -29,17 +29,16 @@ export default async function SemainePage({
   }
 
   const nextStart = toISODate(addDays(parsed, 7))
-  const [scope, slots, nextSlots, meals] = await Promise.all([
-    getPlanningScope(),
+  const scope = await getPlanningScope()
+  const isFamily = scope.type === "family"
+
+  const [slots, nextSlots, meals, otherMeals] = await Promise.all([
     getWeekSlots(weekStart),
     getWeekSlots(nextStart),
     listMeals(),
+    isFamily ? listPersonalMeals() : listFamilyMeals(),
   ])
 
-  const personalMeals =
-    scope.type === "family" ? await listPersonalMeals() : []
-  const familyMeals =
-    scope.type === "personal" ? await listFamilyMeals() : []
   return (
     <WeekBoard
       key={weekStart}
@@ -49,9 +48,9 @@ export default async function SemainePage({
         { start: nextStart, slots: nextSlots },
       ]}
       meals={meals}
-      personalMeals={personalMeals}
-      familyMeals={familyMeals}
-      isFamilyMode={scope.type === "family"}
+      personalMeals={isFamily ? otherMeals : []}
+      familyMeals={isFamily ? [] : otherMeals}
+      isFamilyMode={isFamily}
     />
   )
 }

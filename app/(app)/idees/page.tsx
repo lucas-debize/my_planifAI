@@ -5,21 +5,20 @@ import { getPlanningScope } from "@/lib/actions/session"
 export const dynamic = "force-dynamic"
 
 export default async function IdeesPage() {
-  const [meals, scope] = await Promise.all([
+  const scope = await getPlanningScope()
+  const isFamily = scope.type === "family"
+
+  const [meals, otherMeals] = await Promise.all([
     listMeals(),
-    getPlanningScope(),
+    isFamily ? listPersonalMeals() : listFamilyMeals(),
   ])
 
-  const personalMeals =
-    scope.type === "family" ? await listPersonalMeals() : []
-  const familyMeals =
-    scope.type === "personal" ? await listFamilyMeals() : []
   return (
     <IdeasBoard
       meals={meals}
-      personalMeals={personalMeals}
-      familyMeals={familyMeals}
-      isFamilyMode={scope.type === "family"}
+      personalMeals={isFamily ? otherMeals : []}
+      familyMeals={isFamily ? [] : otherMeals}
+      isFamilyMode={isFamily}
       scopeDisplayName={scope.displayName}
     />
   )

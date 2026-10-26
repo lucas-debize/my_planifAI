@@ -23,6 +23,7 @@ export function PageHeader({
         {backHref ? (
           <Link
             href={backHref}
+            prefetch={true}
             className="tap-press inline-flex size-9 shrink-0 items-center justify-center rounded-xl border border-line/60 bg-surface text-ink hover:bg-muted shadow-2xs transition-colors"
             aria-label={backLabel}
           >

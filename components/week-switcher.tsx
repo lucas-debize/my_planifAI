@@ -33,6 +33,7 @@ export function WeekSwitcher({
     <div className={cn("flex items-center justify-between gap-2", compact ? "py-1" : "py-2")}>
       <Link
         href={hrefFor(prev)}
+        prefetch={true}
         className="tap-press inline-flex size-9 shrink-0 items-center justify-center rounded-xl border border-line/60 bg-surface text-ink hover:bg-muted shadow-2xs transition-colors"
         aria-label="Semaine précédente"
       >
@@ -55,6 +56,7 @@ export function WeekSwitcher({
         ) : (
           <Link
             href={hrefFor(todayIso)}
+            prefetch={true}
             className="tap-press shrink-0 rounded-full border border-primary/30 bg-primary/5 px-2 py-0.5 text-[10px] font-semibold text-primary hover:bg-primary/15 transition-colors"
           >
             Aujourd&apos;hui
@@ -64,6 +66,7 @@ export function WeekSwitcher({
 
       <Link
         href={hrefFor(next)}
+        prefetch={true}
         className="tap-press inline-flex size-9 shrink-0 items-center justify-center rounded-xl border border-line/60 bg-surface text-ink hover:bg-muted shadow-2xs transition-colors"
         aria-label="Semaine suivante"
       >

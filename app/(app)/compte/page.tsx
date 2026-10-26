@@ -32,8 +32,11 @@ export default async function ComptePage({
 }) {
   const resolvedParams = searchParams ? await searchParams : undefined
   const initialJoinCode = resolvedParams?.join?.trim() || null
-  const current = await getCurrentIdentity()
-  const accounts = mergeAccounts(current, await listSavedAccounts())
+  const [current, savedAccounts] = await Promise.all([
+    getCurrentIdentity(),
+    listSavedAccounts(),
+  ])
+  const accounts = mergeAccounts(current, savedAccounts)
 
   let familyInfo: Awaited<ReturnType<typeof getMyFamily>> = null
   let authUid: string | null = null

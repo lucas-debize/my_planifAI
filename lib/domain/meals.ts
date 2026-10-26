@@ -168,20 +168,28 @@ export async function listMeals(
   let query = supabase.from("meals").select(MEAL_SELECT)
 
   let memberNamesById: Map<string, string> | undefined
+  let data: Awaited<typeof query>["data"] = null
+  let error: Awaited<typeof query>["error"] = null
   if (scope.type === "family") {
     query = query.eq("family_id", scope.familyId)
-    const { data: members } = await supabase
-      .from("family_members")
-      .select("user_id, display_name")
-      .eq("family_id", scope.familyId)
+    const [membersRes, mealsRes] = await Promise.all([
+      supabase
+        .from("family_members")
+        .select("user_id, display_name")
+        .eq("family_id", scope.familyId),
+      query,
+    ])
     memberNamesById = new Map<string, string>(
-      (members ?? []).map((m) => [m.user_id, m.display_name || "Membre"])
+      (membersRes.data ?? []).map((m) => [m.user_id, m.display_name || "Membre"])
     )
+    data = mealsRes.data
+    error = mealsRes.error
   } else {
     query = query.eq("user_id", scope.userId).is("family_id", null)
+    const mealsRes = await query
+    data = mealsRes.data
+    error = mealsRes.error
   }
-
-  let { data, error } = await query
   if (error && /quantity/i.test(error.message)) {
     let legacyQuery = supabase.from("meals").select(MEAL_SELECT_LEGACY)
     if (scope.type === "family") {

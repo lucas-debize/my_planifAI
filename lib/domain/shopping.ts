@@ -111,7 +111,25 @@ export async function listWeekIngredients(
       ? { type: "family", familyId: scope.familyId, userId: scope.userId }
       : { type: "personal", userId: scope.userId }
 
-  const slots = await getWeekSlots(supabase, slotScope, weekStart)
+  const isFamily = scope.type === "family"
+
+  let checkQuery = supabase
+    .from("shopping_checks")
+    .select("ingredient_id, checked")
+    .eq("week_start", weekStart)
+
+  if (isFamily) {
+    checkQuery = checkQuery.eq("family_id", scope.familyId)
+  } else {
+    checkQuery = checkQuery.eq("user_id", scope.userId).is("family_id", null)
+  }
+
+  const [slots, { data: checks, error: checkError }] = await Promise.all([
+    getWeekSlots(supabase, slotScope, weekStart),
+    checkQuery,
+  ])
+  if (checkError) throw new Error(checkError.message)
+
   const mealIds = [
     ...new Set(
       slots.map((slot) => slot.meal?.id).filter((id): id is string => Boolean(id))
@@ -134,24 +152,7 @@ export async function listWeekIngredients(
       }
     }
   }
-
   const plannedIds = new Set(unique.keys())
-  const isFamily = scope.type === "family"
-
-  let checkQuery = supabase
-    .from("shopping_checks")
-    .select("ingredient_id, checked")
-    .eq("week_start", weekStart)
-
-  if (isFamily) {
-    checkQuery = checkQuery.eq("family_id", scope.familyId)
-  } else {
-    checkQuery = checkQuery.eq("user_id", scope.userId).is("family_id", null)
-  }
-
-  const { data: checks, error: checkError } = await checkQuery
-  if (checkError) throw new Error(checkError.message)
-
   const checkedById = new Map(
     (checks ?? []).map((row) => [row.ingredient_id, row.checked])
   )

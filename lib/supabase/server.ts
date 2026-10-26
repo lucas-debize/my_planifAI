@@ -1,3 +1,4 @@
+import { cache } from "react"
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import type { Database } from "@/lib/database.types"
@@ -8,7 +9,7 @@ import {
 } from "@/lib/dev/client"
 import { AUTH_COOKIE_OPTIONS, getSupabasePublicConfig } from "@/lib/supabase/env"
 
-export async function createHostedServerClient() {
+export const createHostedServerClient = cache(async () => {
   const config = getSupabasePublicConfig()
   if (!config) return null
 
@@ -33,12 +34,12 @@ export async function createHostedServerClient() {
       },
     },
   })
-}
+})
 
-export async function createClient() {
+export const createClient = cache(async () => {
   const cookieStore = await cookies()
   if (isDevSessionValue(cookieStore.get(DEV_COOKIE)?.value)) {
     return createDevClient()
   }
   return (await createHostedServerClient()) ?? createUnauthenticatedClient()
-}
+})

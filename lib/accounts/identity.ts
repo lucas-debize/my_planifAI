@@ -1,3 +1,4 @@
+import { cache } from "react"
 import { cookies } from "next/headers"
 import type { User } from "@supabase/supabase-js"
 import {
@@ -72,7 +73,7 @@ function accountFromClaims(
   })
 }
 
-export async function getCurrentIdentity(): Promise<SavedAccount | null> {
+export const getCurrentIdentity = cache(async (): Promise<SavedAccount | null> => {
   const cookieStore = await cookies()
   if (isDevSessionValue(cookieStore.get(DEV_COOKIE)?.value)) {
     return DEV_ACCOUNT
@@ -87,7 +88,7 @@ export async function getCurrentIdentity(): Promise<SavedAccount | null> {
 
   const { data } = await supabase.auth.getClaims()
   return accountFromClaims(data?.claims as Record<string, unknown> | undefined)
-}
+})
 
 export async function rememberCurrentAccount() {
   const cookieStore = await cookies()

@@ -1,3 +1,4 @@
+import { cache } from "react"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type {
   Database,
@@ -42,26 +43,29 @@ function parseFamilyPayload(data: Json | null): FamilyPayload | null {
 /**
  * Return the family of the given user, or null if not in any group.
  * Uses the real auth uid (not effective).
+ * Memoized per request with React cache.
  */
-export async function getMyFamily(
-  supabase: Client,
-  authUid: string
-): Promise<FamilyInfo | null> {
-  const { data, error } = await supabase.rpc("get_my_family")
-  if (error || !data) return null
+export const getMyFamily = cache(
+  async (
+    supabase: Client,
+    authUid: string
+  ): Promise<FamilyInfo | null> => {
+    const { data, error } = await supabase.rpc("get_my_family")
+    if (error || !data) return null
 
-  const payload = parseFamilyPayload(data)
-  if (!payload?.family) return null
+    const payload = parseFamilyPayload(data)
+    if (!payload?.family) return null
 
-  const members = payload.members ?? []
-  return {
-    family: payload.family,
-    members,
-    isAdmin: members.some(
-      (member) => member.user_id === authUid && member.role === "admin"
-    ),
+    const members = payload.members ?? []
+    return {
+      family: payload.family,
+      members,
+      isAdmin: members.some(
+        (member) => member.user_id === authUid && member.role === "admin"
+      ),
+    }
   }
-}
+)
 
 /**
  * Create a new family group. The caller becomes admin.
