@@ -3,6 +3,7 @@ export function actionErrorMessage(
   fallback = "Impossible d’enregistrer. Réessaie."
 ): string {
   const message = error instanceof Error ? error.message : String(error ?? "")
+  if (!message || message === "Error" || message === "[object Object]") return fallback
   if (message === "NAME_REQUIRED") return "Donne un nom au plat."
   if (message === "INGREDIENT_NAME_REQUIRED") {
     return "Donne un nom à l’ingrédient."
@@ -15,7 +16,7 @@ export function actionErrorMessage(
   }
   if (message === "SAME_WEEK") return "Choisis une autre semaine."
   if (message === "UNAUTHENTICATED") return "Reconnecte-toi pour continuer."
-  return fallback
+  return message
 }
 
 export function isEmailRateLimited(error: unknown): boolean {

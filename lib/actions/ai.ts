@@ -1,6 +1,5 @@
 "use server"
 
-import Tesseract from "tesseract.js"
 import {
   extractRecipeFromHtml,
   extractMealsFromText,
@@ -60,22 +59,37 @@ Ingrédients :
 
 Réponds directement avec le texte au format indiqué sans bla-bla.`
 
-async function transcribeImage(
+export async function transcribeImageBuffer(
   buffer: Buffer,
-  mimeType: string
+  mimeType: string,
+  customApiKey?: string
 ): Promise<string> {
-  // 1. Mode Gemini Vision si configuré
-  const geminiKey = process.env.GEMINI_API_KEY
+  const geminiKey =
+    process.env.GEMINI_API_KEY ||
+    (customApiKey?.startsWith("AIza") ? customApiKey : undefined)
+
+  const openaiKey =
+    process.env.OPENAI_API_KEY ||
+    (customApiKey?.startsWith("sk-") ? customApiKey : undefined)
+
+  const glmKey =
+    process.env.GLM_API_KEY ||
+    process.env.ZHIPU_API_KEY ||
+    process.env.ZAI_API_KEY ||
+    (customApiKey && !customApiKey.startsWith("AIza") && !customApiKey.startsWith("sk-")
+      ? customApiKey
+      : undefined)
+
+  if (!geminiKey && !openaiKey && !glmKey) {
+    throw new Error(
+      "Aucune clé Vision IA n'est configurée. Pour déchiffrer des photos de plannings et recettes, entrez votre clé d'API (Gemini gratuite, GLM ou OpenAI) ci-dessous ou configurez-la sur Vercel."
+    )
+  }
+
+  // 1. Mode Gemini Vision si configuré (ultra-rapide : ~1.5s)
   if (geminiKey) {
     try {
-      const models = [
-        "gemini-2.0-flash",
-        "gemini-1.5-flash",
-        "gemini-2.5-flash",
-        "gemini-1.5-flash-8b",
-        "gemini-1.5-flash-latest",
-      ]
-      let text: string | undefined
+      const models = ["gemini-2.0-flash", "gemini-1.5-flash"]
       for (const model of models) {
         try {
           const response = await fetch(
@@ -100,29 +114,88 @@ async function transcribeImage(
                   },
                 ],
               }),
-              signal: AbortSignal.timeout(60000),
+              signal: AbortSignal.timeout(12000),
             }
           )
           if (response.ok) {
             const data = await response.json()
             const candText = data?.candidates?.[0]?.content?.parts?.[0]?.text
             if (typeof candText === "string" && candText.trim().length > 0) {
-              text = candText.trim()
-              break
+              return candText.trim()
+            }
+          }
+        } catch {
+          // Essayer le modèle de secours
+        }
+      }
+    } catch {
+      // Repli vers les autres fournisseurs
+    }
+  }
+
+  // 2. Mode Zhipu / GLM Vision si configuré
+  if (glmKey) {
+    try {
+      const models = ["glm-5.3-flash", "glm-4.5v"]
+      for (const model of models) {
+        try {
+          const response = await fetch(
+            "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${glmKey}`,
+              },
+              body: JSON.stringify({
+                model,
+                messages: [
+                  {
+                    role: "user",
+                    content: [
+                      {
+                        type: "text",
+                        text: VISION_PROMPT,
+                      },
+                      {
+                        type: "image_url",
+                        image_url: {
+                          url: `data:${mimeType};base64,${buffer.toString("base64")}`,
+                        },
+                      },
+                    ],
+                  },
+                ],
+                max_tokens: 3500,
+              }),
+              signal: AbortSignal.timeout(35000),
+            }
+          )
+
+          if (response.ok) {
+            const data = await response.json()
+            const rawContent = data?.choices?.[0]?.message?.content
+            const reasoningContent = data?.choices?.[0]?.message?.reasoning_content
+            const text =
+              typeof rawContent === "string" && rawContent.trim().length > 0
+                ? rawContent.trim()
+                : typeof reasoningContent === "string" && reasoningContent.trim().length > 0
+                  ? reasoningContent.trim()
+                  : undefined
+            if (text) {
+              return text
             }
           }
         } catch {
           // Essayer le modèle suivant
         }
       }
-      if (text) return text
     } catch {
-      // En cas d'erreur de clé ou réseau Gemini, repli vers les autres fournisseurs
+      // Repli vers les autres fournisseurs
     }
   }
 
-  // 2. Mode OpenAI Vision si configuré
-  const openaiKey = process.env.OPENAI_API_KEY
+  // 3. Mode OpenAI Vision si configuré
   if (openaiKey) {
     try {
       const models = ["gpt-4o-mini", "gpt-4o"]
@@ -153,9 +226,9 @@ async function transcribeImage(
                   ],
                 },
               ],
-              max_tokens: 3500,
+              max_tokens: 2500,
             }),
-            signal: AbortSignal.timeout(60000),
+            signal: AbortSignal.timeout(15000),
           })
 
           if (response.ok) {
@@ -170,95 +243,13 @@ async function transcribeImage(
         }
       }
     } catch {
-      // Repli vers les autres fournisseurs
+      // Repli
     }
   }
 
-  // 3. Mode Zhipu / GLM Vision si configuré
-  const glmKey =
-    process.env.GLM_API_KEY ||
-    process.env.ZHIPU_API_KEY ||
-    process.env.ZAI_API_KEY
-  if (glmKey) {
-    try {
-      const models = ["glm-4.5v", "glm-4v-plus", "glm-4v"]
-      for (const model of models) {
-        try {
-          const response = await fetch(
-            "https://open.bigmodel.cn/api/paas/v4/chat/completions",
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${glmKey}`,
-              },
-              body: JSON.stringify({
-                model,
-                messages: [
-                  {
-                    role: "user",
-                    content: [
-                      {
-                        type: "text",
-                        text: VISION_PROMPT,
-                      },
-                      {
-                        type: "image_url",
-                        image_url: {
-                          url: `data:${mimeType};base64,${buffer.toString("base64")}`,
-                        },
-                      },
-                    ],
-                  },
-                ],
-                max_tokens: 4096,
-              }),
-              signal: AbortSignal.timeout(75000),
-            }
-          )
-
-          if (response.ok) {
-            const data = await response.json()
-            const rawContent = data?.choices?.[0]?.message?.content
-            const reasoningContent = data?.choices?.[0]?.message?.reasoning_content
-            const text =
-              typeof rawContent === "string" && rawContent.trim().length > 0
-                ? rawContent.trim()
-                : typeof reasoningContent === "string" && reasoningContent.trim().length > 0
-                  ? reasoningContent.trim()
-                  : undefined
-            if (text) {
-              return text
-            }
-          }
-        } catch {
-          // Essayer le modèle suivant
-        }
-      }
-    } catch {
-      // Repli vers Tesseract
-    }
-  }
-
-  // 4. Mode OCR local (Tesseract.js)
-  try {
-    const result = await Tesseract.recognize(buffer, "fra")
-    const text = result?.data?.text?.trim()
-    if (text && text.length > 0) return text
-  } catch {
-    // Repli vers anglais si le dictionnaire français a échoué
-    try {
-      const result = await Tesseract.recognize(buffer, "eng")
-      return result?.data?.text?.trim() ?? ""
-    } catch (ocrErr) {
-      throw new Error(
-        ocrErr instanceof Error
-          ? `Échec de l'OCR local : ${ocrErr.message}`
-          : "Impossible d'analyser l'image en local."
-      )
-    }
-  }
-  return ""
+  throw new Error(
+    "Impossible de déchiffrer l'image avec les clés configurées. Vérifiez la validité de votre clé ou la netteté de la photo."
+  )
 }
 
 export async function extractRecipeFromImageAction(
@@ -277,9 +268,10 @@ export async function extractRecipeFromImageAction(
   const buffer = Buffer.from(arrayBuffer)
   const mimeType = file.type || "image/jpeg"
 
+  const customApiKey = formData.get("customApiKey")?.toString()?.trim() || undefined
   let transcribedText: string
   try {
-    transcribedText = await transcribeImage(buffer, mimeType)
+    transcribedText = await transcribeImageBuffer(buffer, mimeType, customApiKey)
   } catch (err) {
     throw new Error(
       err instanceof Error

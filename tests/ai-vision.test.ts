@@ -33,6 +33,60 @@ describe("Extraction d'images de planning repas (AI Vision)", () => {
     )
   })
 
+  it("signale immédiatement l'absence de clé Vision sans bloquer le serveur", async () => {
+    delete process.env.GEMINI_API_KEY
+    delete process.env.OPENAI_API_KEY
+    delete process.env.GLM_API_KEY
+    delete process.env.ZHIPU_API_KEY
+    delete process.env.ZAI_API_KEY
+
+    const fakeImage = new File([new Uint8Array([1, 2, 3])], "test.jpg", {
+      type: "image/jpeg",
+    })
+    const formData = new FormData()
+    formData.append("image", fakeImage)
+
+    expect(extractRecipeFromImageAction(formData)).rejects.toThrow(
+      "Aucune clé Vision IA n'est configurée"
+    )
+  })
+
+  it("accepte une clé personnalisée passée dans le formulaire", async () => {
+    delete process.env.GEMINI_API_KEY
+    delete process.env.OPENAI_API_KEY
+    delete process.env.GLM_API_KEY
+
+    globalThis.fetch = async (url: string | URL | Request) => {
+      const urlStr = url.toString()
+      if (urlStr.includes("googleapis.com")) {
+        return new Response(
+          JSON.stringify({
+            candidates: [
+              {
+                content: {
+                  parts: [{ text: "Lundi midi : Tarte aux poireaux\nLundi soir : Soupe de légumes" }],
+                },
+              },
+            ],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      }
+      return new Response("Not found", { status: 404 })
+    }
+
+    const fakeImage = new File([new Uint8Array([1, 2, 3])], "test.jpg", {
+      type: "image/jpeg",
+    })
+    const formData = new FormData()
+    formData.append("image", fakeImage)
+    formData.append("customApiKey", "AIzaSyTestCustomGeminiKey")
+
+    const result = await extractRecipeFromImageAction(formData)
+    expect(result.transcribedText).toContain("Lundi midi : Tarte aux poireaux")
+    expect(result.result.meals[0].title).toBe("Tarte aux poireaux")
+  })
+
   it("extrait un planning complet via GLM Vision (Zhipu)", async () => {
     process.env.GLM_API_KEY = "test-glm-key"
     delete process.env.GEMINI_API_KEY

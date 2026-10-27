@@ -42,7 +42,7 @@ import {
   getDefaultRecipeForDish,
   type ExtractedRecipe,
 } from "@/lib/ai/recipe-extractor"
-import { extractRecipeFromImageAction } from "@/lib/actions/ai"
+import { scanImageClient, getStoredUserAiKey } from "@/lib/ai/client-scan"
 import { applyAutoPlanAction } from "@/lib/actions/auto-plan"
 import { optimizeImageForOcr } from "@/lib/images/optimize"
 import { actionErrorMessage } from "@/lib/errors"
@@ -114,6 +114,7 @@ function MagicPlanModalContent({
     { date: string; kind: SlotKind; mealName: string; selected: boolean }[]
   >([])
   const [extractedBatchMeals, setExtractedBatchMeals] = useState<ExtractedRecipe[]>([])
+  const [scanStatus, setScanStatus] = useState<string | null>(null)
 
   const cameraInputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -216,12 +217,21 @@ function MagicPlanModalContent({
 
       startAnalyzeTransition(async () => {
         try {
+          setScanStatus("Préparation de l'image...")
           const formData = new FormData()
           formData.append("image", photoFile)
-          const result = await extractRecipeFromImageAction(formData)
+          const savedKey = getStoredUserAiKey()
+          if (savedKey) {
+            formData.append("customApiKey", savedKey)
+          }
+          const result = await scanImageClient(formData, (percent, label) => {
+            setScanStatus(`${label} (${percent}%)`)
+          })
           processTranscribedText(result.transcribedText)
         } catch (err) {
           toast.error(actionErrorMessage(err))
+        } finally {
+          setScanStatus(null)
         }
       })
       return
@@ -709,7 +719,7 @@ function MagicPlanModalContent({
                   {isAnalyzing ? (
                     <>
                       <Loader2 className="size-4 animate-spin" />
-                      <span>Analyse en cours...</span>
+                      <span>{scanStatus || "Analyse en cours..."}</span>
                     </>
                   ) : (
                     <>
