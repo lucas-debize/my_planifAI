@@ -18,30 +18,30 @@ export function PageHeader({
   const isRootPage = !backHref && showWorkspace && title !== "Compte"
 
   return (
-    <header className="flex items-center justify-between gap-2 px-4 py-3 md:px-8 border-b border-line/40 bg-bg/50">
-      <div className="flex min-w-0 items-center gap-2">
-        {backHref ? (
-          <Link
-            href={backHref}
-            prefetch={true}
-            className="tap-press inline-flex size-9 shrink-0 items-center justify-center rounded-xl border border-line/60 bg-surface text-ink hover:bg-muted shadow-2xs transition-colors"
-            aria-label={backLabel}
-          >
-            <ArrowLeft className="size-4.5" />
-          </Link>
-        ) : null}
+    <header className="flex flex-col gap-2.5 px-4 py-3 sm:flex-row sm:items-center sm:justify-between md:px-8 border-b border-line/40 bg-bg/50">
+      <div className="flex w-full items-center justify-between gap-2 sm:w-auto">
         <div className="flex min-w-0 items-center gap-2">
+          {backHref ? (
+            <Link
+              href={backHref}
+              prefetch={true}
+              className="tap-press inline-flex size-9 shrink-0 items-center justify-center rounded-xl border border-line/60 bg-surface text-ink hover:bg-muted shadow-2xs transition-colors"
+              aria-label={backLabel}
+            >
+              <ArrowLeft className="size-4.5" />
+            </Link>
+          ) : null}
           <h1 className="truncate font-fraunces text-xl font-bold tracking-tight text-ink sm:text-2xl md:text-3xl">
             {title}
           </h1>
-          {isRootPage ? (
-            <WorkspaceSwitcher compact className="md:hidden shrink-0" />
-          ) : null}
         </div>
+        {isRootPage ? (
+          <WorkspaceSwitcher compact className="sm:hidden shrink-0" />
+        ) : null}
       </div>
 
       {actions ? (
-        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+        <div className="flex w-full flex-wrap items-center gap-1.5 sm:w-auto sm:gap-2">
           {actions}
         </div>
       ) : null}

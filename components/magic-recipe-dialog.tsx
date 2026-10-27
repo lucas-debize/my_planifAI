@@ -77,7 +77,7 @@ export function MagicRecipeDialog({
   const [isSaving, setIsSaving] = useState(false)
 
   const [isPending, startTransition] = useTransition()
-
+  const [importMode, setImportMode] = useState<"planning" | "recipe">("planning")
   const [userApiKey, setUserApiKey] = useState(() => getStoredUserAiKey())
   const [showApiKeyInput, setShowApiKeyInput] = useState(false)
   const [tempApiKey, setTempApiKey] = useState("")
@@ -134,6 +134,7 @@ export function MagicRecipeDialog({
           setScanStatus("Préparation de l'image...")
           const formData = new FormData()
           formData.append("image", photoFile)
+          formData.append("importMode", importMode)
           const savedKey = userApiKey || getStoredUserAiKey()
           if (savedKey) {
             formData.append("customApiKey", savedKey)
@@ -184,8 +185,8 @@ export function MagicRecipeDialog({
         const batch = await extractRecipeAction({
           mode: tab,
           content,
+          importMode,
         })
-        setPreviewBatch(batch)
         setSelectedIndices(new Set(batch.meals.map((_, i) => i)))
         setExpandedIndices(new Set())
         if (batch.kind === "list") {
@@ -203,8 +204,11 @@ export function MagicRecipeDialog({
 
   function handleReExtractFromTranscribedText() {
     if (!transcribedText.trim()) return
-    const batch = extractMealsFromText(transcribedText, "image")
-    setPreviewBatch(batch)
+    const batch = extractMealsFromText(
+      transcribedText,
+      "image",
+      importMode === "planning" ? "list" : undefined
+    )
     setSelectedIndices(new Set(batch.meals.map((_, i) => i)))
     setExpandedIndices(new Set())
     toast.success(
@@ -477,14 +481,18 @@ export function MagicRecipeDialog({
                   ? previewBatch.kind === "list"
                     ? `Planning détecté · ${previewBatch.meals.length} plats identifiés`
                     : "Recette détectée"
-                  : "Import magique de recette"}
+                  : importMode === "planning"
+                    ? "Import d'un planning de repas"
+                    : "Import d'une recette"}
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground">
                 {previewBatch
                   ? previewBatch.kind === "list"
                     ? "Une recette par défaut a été automatiquement attribuée à chaque plat. Ajustez les ingrédients avant d'importer."
                     : "Vérifiez le titre et ajustez les quantités des ingrédients avant de valider."
-                  : "Photographiez une page de livre ou planning, collez un texte ou entrez un lien : l'IA extrait automatiquement le titre et les ingrédients avec quantités."}
+                  : importMode === "planning"
+                    ? "Photographiez ou collez votre semainier pour extraire tous les plats et les ajouter en bloc à vos idées."
+                    : "Photographiez une recette, collez un texte ou entrez un lien pour extraire ses ingrédients avec quantités."}
               </DialogDescription>
             </div>
           </div>
@@ -493,6 +501,41 @@ export function MagicRecipeDialog({
         {/* Étape 1 : Saisie de la source (si aucune prévisualisation active) */}
         {!previewBatch ? (
           <>
+            {/* Sélecteur de type d'import */}
+            <div className="flex flex-col gap-1 rounded-xl border border-line/60 bg-muted/20 p-1.5 text-xs">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-1">
+                Type de document à importer
+              </span>
+              <div className="grid grid-cols-2 gap-1 font-medium">
+                <button
+                  type="button"
+                  className={cn(
+                    "flex items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs transition-all",
+                    importMode === "planning"
+                      ? "bg-card text-primary shadow-xs font-bold border border-primary/20"
+                      : "text-muted-foreground hover:text-ink"
+                  )}
+                  onClick={() => setImportMode("planning")}
+                >
+                  <Layers className="size-3.5" />
+                  <span>Planning (idées multiples)</span>
+                </button>
+                <button
+                  type="button"
+                  className={cn(
+                    "flex items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs transition-all",
+                    importMode === "recipe"
+                      ? "bg-card text-primary shadow-xs font-bold border border-primary/20"
+                      : "text-muted-foreground hover:text-ink"
+                  )}
+                  onClick={() => setImportMode("recipe")}
+                >
+                  <Sparkles className="size-3.5" />
+                  <span>Recette unique</span>
+                </button>
+              </div>
+            </div>
+
             {/* Onglets Texte vs URL vs Photo */}
             <div className="grid grid-cols-3 rounded-xl bg-muted/60 p-1 text-xs font-medium">
               <button
@@ -541,13 +584,17 @@ export function MagicRecipeDialog({
                 <Textarea
                   value={textContent}
                   onChange={(e) => setTextContent(e.target.value)}
-                  placeholder={`Collez ici une recette complète ou une liste d'ingrédients...\n\nExemple :\nTarte aux poireaux et chèvre\n- 3 poireaux émincés\n- 200g de chèvre\n- 3 oeufs\n- 20cl de crème fraîche\n- 1 pâte feuilletée`}
-                  rows={8}
+                  placeholder={
+                    importMode === "planning"
+                      ? `Collez ou dictez vos repas de la semaine...\n\nExemple :\nSamedi : Haricot vert / Poisson\n- Panini\nDimanche : Steak patate\n- Nems / Riz cantonais\nLundi : Reste\n- Tartiflette\nMardi : Steak frites...`
+                      : `Collez ici une recette complète ou une liste d'ingrédients...\n\nExemple :\nTarte aux poireaux et chèvre\n- 3 poireaux émincés\n- 200g de chèvre\n- 3 oeufs\n- 20cl de crème fraîche`
+                  }
+                  rows={7}
                   className="resize-none font-sans text-xs"
                   disabled={isPending}
                 />
                 <p className="text-[11px] text-muted-foreground">
-                  ⚡ Détection intelligente des quantités, des unités et des noms d&apos;ingrédients.
+                  💡 <strong>Astuce</strong> : Touchez l&apos;icône micro du clavier de votre smartphone pour dicter votre liste en 10 secondes !
                 </p>
               </div>
             ) : tab === "url" ? (

@@ -947,6 +947,27 @@ function parseSingleRecipe(
     source: source ?? "text",
   }
 }
+const FRENCH_CULINARY_HINTS: Record<string, true> = {
+  lundi: true, mardi: true, mercredi: true, jeudi: true, vendredi: true, samedi: true, dimanche: true,
+  midi: true, soir: true, dejeuner: true, diner: true, matin: true, gouter: true, repas: true, menu: true, semaine: true, planning: true,
+  viande: true, boeuf: true, poulet: true, porc: true, jambon: true, steak: true, poisson: true, saumon: true, cabillaud: true, thon: true,
+  pate: true, pates: true, riz: true, pomme: true, pommes: true, frite: true, frites: true, salade: true, soupe: true, potage: true, haricot: true,
+  haricots: true, tomate: true, tomates: true, fromage: true, oeuf: true, oeufs: true, pain: true, crepe: true, crepes: true, tarte: true,
+  pizza: true, cake: true, gnocchi: true, gnocci: true, sauce: true, creme: true, huile: true, beurre: true, sel: true, poivre: true,
+  plat: true, recette: true, reste: true, restes: true, curry: true, gratin: true, quiche: true, lasagne: true, puree: true,
+  panini: true, nems: true, tartiflette: true, bolo: true, croque: true, croissant: true, chevre: true, endive: true, calmar: true,
+}
+
+export function isOcrGibberish(text: string): boolean {
+  if (!text || text.trim().length < 5) return true
+  const norm = text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+  const words = norm.split(/[^a-z0-9]+/)
+  const foundHint = words.some((w) => Boolean(FRENCH_CULINARY_HINTS[w]))
+  return !foundHint
+}
 
 /**
  * Détecte si le texte représente une recette unique ou une liste/planning de plats,
@@ -954,7 +975,8 @@ function parseSingleRecipe(
  */
 export function extractMealsFromText(
   rawText: string,
-  source?: "url" | "text" | "json-ld" | "image"
+  source?: "url" | "text" | "json-ld" | "image",
+  forceKind?: "list" | "single"
 ): ExtractedMealBatch {
   const trimmed = rawText.trim()
   if (!trimmed) {
@@ -965,8 +987,13 @@ export function extractMealsFromText(
     }
   }
 
-  const lines = normalizeDayLines(rawText.split(/\r?\n/))
+  if (source === "image" && isOcrGibberish(rawText)) {
+    throw new Error(
+      "L'écriture manuscrite sur cette photo n'a pas pu être reconnue par l'OCR local. Pour importer vos repas, utilisez l'onglet Texte (saisie ou dictée vocale au micro) ou activez une clé Google Gemini 100% gratuite (sans carte bancaire sur aistudio.google.com)."
+    )
+  }
 
+  const lines = normalizeDayLines(rawText.split(/\r?\n/))
   // Heuristique 1 : Marqueurs multi-plats explicites (=== PLAT : [Nom] === ou PLAT : [Nom])
   const platMarkerCount = lines.filter((l) => PLAT_MARKER_REGEX.test(l.trim())).length
   if (platMarkerCount > 0) {
@@ -1158,6 +1185,35 @@ export function extractMealsFromText(
           }
         }
       }
+    }
+  }
+
+  // Si le mode planning / liste de plats est explicitement requis
+  if (forceKind === "list") {
+    const listLines = lines.filter((l) => {
+      const t = l.trim()
+      if (!t || HEADER_LINE_REGEX.test(t)) return false
+      return t.length >= 2 && !/^(?:ingr[eé]dients?|pr[eé]paration|[eé]tapes?|cuisson)\b/i.test(t)
+    })
+    const meals: ExtractedRecipe[] = []
+    const seenTitles = new Set<string>()
+    for (const l of listLines) {
+      const dish = cleanDishName(l)
+      if (!dish || dish.length < 2) continue
+      const norm = normalizeName(dish)
+      if (seenTitles.has(norm)) continue
+      seenTitles.add(norm)
+      const defaultIngs = getDefaultRecipeForDish(dish)
+      meals.push({
+        title: dish,
+        ingredients: defaultIngs.map((i) => i.name),
+        detailedIngredients: defaultIngs,
+        isDefaultRecipe: true,
+        source: source ?? "text",
+      })
+    }
+    if (meals.length > 0) {
+      return { kind: "list", meals, source: source ?? "text" }
     }
   }
 

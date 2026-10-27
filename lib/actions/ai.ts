@@ -285,8 +285,12 @@ export async function extractRecipeFromImageAction(
       "Aucun texte n'a pu être déchiffré sur cette image. Vérifiez la netteté et l'éclairage de la photo, ou configurez une clé d'API Vision (GEMINI_API_KEY, OPENAI_API_KEY ou GLM_API_KEY) pour les semainiers manuscrits."
     )
   }
-
-  const result = extractMealsFromText(transcribedText, "image")
+  const importMode = formData.get("importMode")?.toString() === "recipe" ? "recipe" : "planning"
+  const result = extractMealsFromText(
+    transcribedText,
+    "image",
+    importMode === "planning" ? "list" : undefined
+  )
   const recipe = result.meals[0] || {
     title: "Nouvelle recette",
     ingredients: [],
@@ -304,6 +308,7 @@ export async function extractRecipeFromImageAction(
 export async function extractRecipeAction(input: {
   mode: "text" | "url"
   content: string
+  importMode?: "planning" | "recipe"
 }): Promise<ExtractedMealBatch> {
   const content = input.content.trim()
   if (!content) {
@@ -364,7 +369,11 @@ export async function extractRecipeAction(input: {
   }
 
   // Mode texte libre
-  const batch = extractMealsFromText(content, "text")
+  const batch = extractMealsFromText(
+    content,
+    "text",
+    input.importMode === "planning" ? "list" : undefined
+  )
   if (
     batch.meals.length === 0 ||
     (batch.meals.length === 1 &&

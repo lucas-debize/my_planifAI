@@ -10,6 +10,7 @@ import {
   cleanDishName,
   normalizeDayLines,
   parsePlanningToWeekSlots,
+  isOcrGibberish,
 } from "@/lib/ai/recipe-extractor"
 
 describe("Import magique de recette (NLP & Extraction locale)", () => {
@@ -435,6 +436,39 @@ Ingrédients :
         "lundi soir : Salade",
         "mardi midi : Quiche",
         "mardi soir : Soupe",
+      ])
+    })
+  })
+
+  describe("isOcrGibberish & Sécurisation de l'OCR", () => {
+    it("détecte le charabia de lettres et symboles aléatoires issus d'un OCR défaillant", () => {
+      const gibberish = `æ }, E. . 3\n: ports = KFONNnc0 Pi\n? - pa 9 az\nÄ E >U`
+      expect(isOcrGibberish(gibberish)).toBe(true)
+    })
+
+    it("valide les textes culinaires normaux", () => {
+      const good = `Samedi - Haricot vert / Poisson\n- Panini\nDimanche - Bon steak / Patate`
+      expect(isOcrGibberish(good)).toBe(false)
+    })
+
+    it("rejette le charabia OCR dans extractMealsFromText au lieu de créer une fausse recette", () => {
+      const gibberish = `æ }, E. . 3\n: ports = KFONNnc0 Pi\n? - pa 9 az\nÄ E >U`
+      expect(() => extractMealsFromText(gibberish, "image")).toThrow(
+        "L'écriture manuscrite sur cette photo n'a pas pu être reconnue"
+      )
+    })
+
+    it("extrait une liste de plats simples en mode planning forcé", () => {
+      const dishes = `Haricot vert / Poisson\nPanini\nBon steak / Patate\nNems / Riz cantonais\nCorne de boeuf / Tartiflette`
+      const batch = extractMealsFromText(dishes, "text", "list")
+      expect(batch.kind).toBe("list")
+      expect(batch.meals.length).toBe(5)
+      expect(batch.meals.map((m) => m.title)).toEqual([
+        "Haricot vert / Poisson",
+        "Panini",
+        "Bon steak / Patate",
+        "Nems / Riz cantonais",
+        "Corne de boeuf / Tartiflette",
       ])
     })
   })
