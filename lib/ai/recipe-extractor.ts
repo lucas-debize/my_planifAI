@@ -632,12 +632,19 @@ export function cleanDishName(rawName: string): string {
 
   // Retirer markdown gras / italique / titres
   s = s.replace(/[*#_]/g, "").trim()
-  // Retirer guillemets et chevrons
   s = s.replace(/^["'«»“”]+|["'«»“”]+$/g, "").trim()
+
+  // Si la ligne contient un créneau précédé de bruit ou en milieu de ligne, cibler le contenu après le créneau
+  const slotMatch = s.match(
+    /\b(?:midi|soir|d[eé]jeuner|d[iî]ner|cr[eé]neau\s*\d+)\s*[:=\-–—.]\s*(.+)$/i
+  )
+  if (slotMatch) {
+    s = slotMatch[1]
+  }
 
   // Si la chaîne est juste un nom de jour ou créneau sans plat, ce n'est pas un plat
   if (
-    /^(?:[-*•+–—\s\d.)\]>]*)(?:(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)(?:\s+(?:midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter))?|(?:midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter))\s*[:\-–—.]?\s*$/i.test(
+    /^(?:[-*•+–—\s\d.)\]>]*)(?:(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)(?:\s+(?:midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter|cr[eé]neau\s*\d+))?|(?:midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter|cr[eé]neau\s*\d+))\s*[:\-–—.]?\s*$/i.test(
       s
     )
   ) {
@@ -646,19 +653,20 @@ export function cleanDishName(rawName: string): string {
 
   // Nettoyer préfixes de jour ou créneau résiduels
   s = s.replace(
-    /^(?:[-*•+–—\s\d.)\]>]*)(?:(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)(?:\s+(?:midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter))?|(?:midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter))\s*[:\-–—.]\s*/i,
+    /^(?:[-*•+–—\s\d.)\]>]*)(?:(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)(?:\s+(?:midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter|cr[eé]neau\s*\d+))?|(?:midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter|cr[eé]neau\s*\d+))\s*[:\-–—.]\s*/i,
     ""
   )
-  s = s.replace(/^(?:midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter)\s*[:\-–—.]\s*/i, "")
-  s = s.replace(/^[-*•+–—\s\d.)\]>]+/, "")
-
-  // Nettoyer annotations entre parenthèses ou astérisques courantes
+  s = s.replace(/^(?:midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter|cr[eé]neau\s*\d+)\s*[:\-–—.]\s*/i, "")
+  // Nettoyer annotations entre parenthèses ou astérisques courantes en premier
   s = s.replace(
     /\s*\(\s*(?:non renseign[eé]|repas au restaurant|repas ext[eé]rieur|optionnel|midi|soir|d[eé]jeuner|d[iî]ner|rapide|lecture|note).*?\)/gi,
     ""
   )
   s = s.replace(/\s*\(\s*[«"']?\s*(?:roste|reste)\s*[»"']?\s*\)/gi, "")
   s = s.replace(/\s*\*(?:non renseign[eé]|repas au restaurant|non préparé|lecture|note).*?\*\s*/gi, "")
+  s = s.replace(/^[©®™ÿ\d\s()<>+=–—\-.*•]+/, "")
+  s = s.replace(/\s*&[a-zà-ÿ0-9]*$/i, "")
+  s = s.replace(/[^a-zà-ÿ0-9)]+$/i, "")
   s = s.replace(/[*#_]/g, "").trim()
   s = s.replace(/[.:;!,\s]+$/, "").trim()
   // Normalisation des restes et coquilles manuscrites
@@ -685,7 +693,7 @@ export const HEADER_LINE_REGEX =
   /^(?:planning|menu|programme|repas|id[eé]es?\s+de\s+repas|semaine|liste\s+de\s+plats?)(?:\s+(?:de\s+la\s+semaine|semaine|\d+))?\s*:?$/i
 
 export const DAY_PREFIX_LINE_REGEX =
-  /^(?:[-*•+–—\s\d.)\]>]*\*{0,2})(?:(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)(?:\s*\*{0,2}\s+(midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter))?|(midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter))\s*\*{0,2}\s*[:\-–—.]\s*(.+)$/i
+  /^(?:[-*•+–—\s\d.)\]>]*\*{0,2})(?:(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)(?:\s*\*{0,2}\s+(midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter|cr[eé]neau\s*\d+))?|(midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter|cr[eé]neau\s*\d+))\s*\*{0,2}\s*[:\-–—.]\s*(.+)$/i
 
 export const DAY_STANDALONE_REGEX =
   /^(?:[-*•+–—\s\d.)\]>]*\*{0,2})(?:(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)(?:\s*\*{0,2}\s+(midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter))?|(midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter))\s*\*{0,2}\s*[:\-–—.]?\s*$/i
