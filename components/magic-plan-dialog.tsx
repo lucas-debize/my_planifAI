@@ -39,7 +39,8 @@ import {
 import {
   extractMealsFromText,
   parsePlanningToWeekSlots,
-  type ParsedWeekSlot,
+  getDefaultRecipeForDish,
+  type ExtractedRecipe,
 } from "@/lib/ai/recipe-extractor"
 import { extractRecipeFromImageAction } from "@/lib/actions/ai"
 import { applyAutoPlanAction } from "@/lib/actions/auto-plan"
@@ -112,6 +113,7 @@ function MagicPlanModalContent({
   const [detectedSlots, setDetectedSlots] = useState<
     { date: string; kind: SlotKind; mealName: string; selected: boolean }[]
   >([])
+  const [extractedBatchMeals, setExtractedBatchMeals] = useState<ExtractedRecipe[]>([])
 
   const cameraInputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -235,6 +237,8 @@ function MagicPlanModalContent({
 
   function processTranscribedText(text: string) {
     const parsedSlots = parsePlanningToWeekSlots(text, effectiveWeekStart)
+    const batch = extractMealsFromText(text, "image")
+    setExtractedBatchMeals(batch.meals)
 
     if (parsedSlots.length > 0) {
       setDetectedSlots(
@@ -250,13 +254,13 @@ function MagicPlanModalContent({
     }
 
     // Repli : extraction de plats simples sans jours identifiés
-    const batch = extractMealsFromText(text, "image")
     if (batch.meals.length > 0) {
-      // Assigner dans l'ordre chronologique aux créneaux vides de la semaine
+      // Assigner dans l'ordre chronologique aux créneaux vides ou créneaux de la semaine
       const emptySlots = slots.filter((s) => s.meal === null)
-      const mapped = batch.meals.slice(0, emptySlots.length).map((m, idx) => ({
-        date: emptySlots[idx].slot_date,
-        kind: emptySlots[idx].slot_kind,
+      const targetSlots = emptySlots.length > 0 ? emptySlots : slots
+      const mapped = batch.meals.slice(0, targetSlots.length).map((m, idx) => ({
+        date: targetSlots[idx].slot_date,
+        kind: targetSlots[idx].slot_kind,
         mealName: m.title,
         selected: true,
       }))
@@ -264,7 +268,7 @@ function MagicPlanModalContent({
       if (mapped.length > 0) {
         setDetectedSlots(mapped)
         toast.success(
-          `${mapped.length} plats identifiés et pré-assignés aux créneaux vides.`
+          `${mapped.length} plats identifiés et pré-assignés aux créneaux.`
         )
         return
       }
@@ -289,18 +293,31 @@ function MagicPlanModalContent({
           const existing = meals.find(
             (m) => m.name.toLowerCase() === s.mealName.trim().toLowerCase()
           )
+          const isLeftover = /^reste\b/i.test(s.mealName.trim())
+          const batchMatch = !isLeftover
+            ? extractedBatchMeals.find(
+                (m) => m.title.toLowerCase() === s.mealName.trim().toLowerCase()
+              )
+            : undefined
+          const defaultIngredients = isLeftover
+            ? []
+            : batchMatch && batchMatch.ingredients.length > 0
+              ? batchMatch.ingredients
+              : getDefaultRecipeForDish(s.mealName.trim()).map((i) => i.name)
+
           return {
             date: s.date,
             kind: s.kind,
             meal: {
               id: existing?.id,
               name: s.mealName.trim(),
-              ingredients: existing?.ingredients.map((i) => i.name) ?? [],
+              ingredients: existing
+                ? existing.ingredients.map((i) => i.name)
+                : defaultIngredients,
               origin: existing ? ("catalog" as const) : ("ai" as const),
             },
           }
         })
-
         const result = await applyAutoPlanAction(payload)
         onApplied(result.slots)
         toast.success(

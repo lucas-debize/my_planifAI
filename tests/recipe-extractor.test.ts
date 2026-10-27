@@ -7,6 +7,9 @@ import {
   extractRecipeFromHtml,
   extractMealsFromText,
   getDefaultRecipeForDish,
+  cleanDishName,
+  normalizeDayLines,
+  parsePlanningToWeekSlots,
 } from "@/lib/ai/recipe-extractor"
 
 describe("Import magique de recette (NLP & Extraction locale)", () => {
@@ -366,6 +369,207 @@ Quiche lorraine`
       expect(batch.meals[0].title).toBe("Poulet rôti")
       expect(batch.meals[1].title).toBe("Salade César")
       expect(batch.meals[2].title).toBe("Quiche lorraine")
+    })
+    it("isole les ingrédients des blocs PLAT d'une section récapitulatif ou planning", () => {
+      const text = `=== PLAT : Courgette viande hachée pâtes ===
+Ingrédients :
+- 2 courgettes
+- 500g viande hachée
+
+=== PLAT : Poisson à la bordelaise ===
+Ingrédients :
+- 4 filets de cabillaud
+- 3 poireaux
+
+---
+**Récapitulatif du planning :**
+• **Lundi** midi : Courgette viande hachée pâtes | soir : Poisson à la bordelaise
+• **Mardi** midi : Pâtes au jambon | soir : Steak haricots
+
+*Bon appétit !*`
+
+      const batch = extractMealsFromText(text, "image")
+      expect(batch.kind).toBe("list")
+      const poisson = batch.meals.find((m) => m.title === "Poisson à la bordelaise")
+      expect(poisson).toBeDefined()
+      expect(poisson?.detailedIngredients.length).toBe(2)
+      expect(poisson?.detailedIngredients.map((i) => i.name)).toEqual([
+        "Filets de cabillaud",
+        "Poireaux",
+      ])
+      // Vérifie que les plats du planning hors bloc sont aussi capturés
+      const patesJambon = batch.meals.find((m) => m.title === "Pâtes au jambon")
+      expect(patesJambon).toBeDefined()
+      expect(patesJambon?.isDefaultRecipe).toBe(true)
+    })
+  })
+
+  describe("cleanDishName", () => {
+    it("nettoie le markdown, les puces et les annotations", () => {
+      expect(cleanDishName("**Courgette viande hachée pâtes**")).toBe(
+        "Courgette viande hachée pâtes"
+      )
+      expect(cleanDishName("• Courgette viande hachée pâtes,")).toBe(
+        "Courgette viande hachée pâtes"
+      )
+      expect(cleanDishName("Cake / Frite *(lecture : Farte)*")).toBe("Cake / Frite")
+      expect(cleanDishName("Reste (« Roste »)")).toBe("Reste")
+      expect(cleanDishName("rete")).toBe("Reste")
+      expect(cleanDishName("*(non renseigné)*")).toBe("")
+      expect(cleanDishName("Invité(e)")).toBe("")
+      expect(cleanDishName("Lundi midi : Salade")).toBe("Salade")
+    })
+  })
+
+  describe("normalizeDayLines", () => {
+    it("découpe les lignes composées et associe les créneaux", () => {
+      const lines = [
+        "• **Lundi** midi : Pâtes | soir : Salade",
+        "### **Mardi**",
+        "Midi : Quiche",
+        "Soir : Soupe",
+      ]
+      const normalized = normalizeDayLines(lines)
+      expect(normalized).toEqual([
+        "lundi midi : Pâtes",
+        "lundi soir : Salade",
+        "mardi midi : Quiche",
+        "mardi soir : Soupe",
+      ])
+    })
+  })
+
+  describe("parsePlanningToWeekSlots - Support des photos de plannings réels", () => {
+    const mondayIso = "2026-10-26"
+
+    it("découpe un semainier format liste markdown avec lignes composées (Photo 1)", () => {
+      const text = `• **Lundi** midi : Courgette viande hachée pâtes | soir : Poisson à la bordelaise fondue de poireaux  
+• **Mardi** midi : Pâtes au jambon poireaux | soir : Steak haricots pâtes  
+• **Mercredi** midi : Œufs coque champignons | soir : Tarte thon tomate  
+• **Jeudi** midi : Tarte thon tomate | soir : Pizza - resto  
+• **Vendredi** midi : Poulet tian provençal | soir : Poulet tian provençal  
+• **Samedi** midi : Pique-nique | soir : Omelette pommes de terre  
+• **Dimanche** midi : Pique-nique | soir : Saumon riz épinards`
+
+      const slots = parsePlanningToWeekSlots(text, mondayIso)
+      expect(slots.length).toBe(14)
+      expect(slots[0]).toEqual({
+        date: "2026-10-26",
+        kind: "dejeuner",
+        mealName: "Courgette viande hachée pâtes",
+      })
+      expect(slots[1]).toEqual({
+        date: "2026-10-26",
+        kind: "diner",
+        mealName: "Poisson à la bordelaise fondue de poireaux",
+      })
+      expect(slots[12]).toEqual({
+        date: "2026-11-01",
+        kind: "dejeuner",
+        mealName: "Pique-nique",
+      })
+      expect(slots[13]).toEqual({
+        date: "2026-11-01",
+        kind: "diner",
+        mealName: "Saumon riz épinards",
+      })
+    })
+
+    it("découpe un semainier manuscrit avec repas multiples sous chaque jour (Photo 2)", () => {
+      const text = `Samedi - Haricot vert / Poisson .
+       - Panini .
+Dimanche - Bon steack / Patate .
+         - Nems / Riz cantonais .
+Lundi - Reste
+      - Corne de boeuf / Tartiflette
+Mardi - Rete
+      - Steak / frite
+Mercredi - Epinard saumon / oeuf
+         - Pate bolo
+Jeudi - Reste
+      - Haricot blanc / Sauté de porc
+Vendredi - Gnocci lardons .
+         - Croque Monsieur / Croissant`
+
+      const slots = parsePlanningToWeekSlots(text, mondayIso)
+      expect(slots.length).toBe(14)
+      // Lundi
+      const lundiMidi = slots.find((s) => s.date === "2026-10-26" && s.kind === "dejeuner")
+      const lundiSoir = slots.find((s) => s.date === "2026-10-26" && s.kind === "diner")
+      expect(lundiMidi?.mealName).toBe("Reste")
+      expect(lundiSoir?.mealName).toBe("Corne de boeuf / Tartiflette")
+
+      // Mardi (avec typo 'Rete' corrigée en 'Reste')
+      const mardiMidi = slots.find((s) => s.date === "2026-10-27" && s.kind === "dejeuner")
+      const mardiSoir = slots.find((s) => s.date === "2026-10-27" && s.kind === "diner")
+      expect(mardiMidi?.mealName).toBe("Reste")
+      expect(mardiSoir?.mealName).toBe("Steak / frite")
+
+      // Samedi
+      const samediMidi = slots.find((s) => s.date === "2026-10-31" && s.kind === "dejeuner")
+      const samediSoir = slots.find((s) => s.date === "2026-10-31" && s.kind === "diner")
+      expect(samediMidi?.mealName).toBe("Haricot vert / Poisson")
+      expect(samediSoir?.mealName).toBe("Panini")
+    })
+
+    it("découpe un semainier avec titres markdown et créneaux explicites (Photo 4)", () => {
+      const text = `**Samedi midi :** Grosse salade / Tartine chèvre  
+**Samedi soir :** Cake / Pizza  
+**Dimanche midi :** Reste (Gnocchi)  
+**Dimanche soir :** Tarte feuilletée  
+**Lundi midi :** Reste  
+**Lundi soir :** Pâtes Bolognaise  
+**Mardi midi :** Reste  
+**Mardi soir :** Petits pois / Endives  
+**Mercredi midi :** Beignets de calmar / Purée / Frites  
+**Mercredi soir :** Rougail saucisse  
+**Jeudi midi :** Reste  
+**Jeudi soir :** Steak / Frites  
+**Vendredi midi :** Sandwich au thon  
+**Vendredi soir :** *(non renseigné)*`
+
+      const slots = parsePlanningToWeekSlots(text, mondayIso)
+      expect(slots.length).toBe(13)
+      // Ignore *(non renseigné)* pour Vendredi soir
+      const vendSoir = slots.find((s) => s.date === "2026-10-30" && s.kind === "diner")
+      expect(vendSoir).toBeUndefined()
+      const vendMidi = slots.find((s) => s.date === "2026-10-30" && s.kind === "dejeuner")
+      expect(vendMidi?.mealName).toBe("Sandwich au thon")
+    })
+
+    it("découpe un semainier sous forme de fiches journalières avec sous-listes (Photo 5)", () => {
+      const text = `**LUNDI**
+*   **Lundi midi : Salade**
+*   **Lundi soir : Potage légumes**
+
+**MARDI**
+*   **Mardi midi : Taboulé**
+*   **Mardi soir : Rôti de bœuf**
+
+**MERCREDI**
+*   **Mercredi midi : Salade verte & Saucisse**
+*   **Mercredi soir : Salade verte**
+
+**JEUDI**
+*   **Jeudi midi : Restaurant**
+*   **Jeudi soir : Petit Colin**
+
+**VENDREDI**
+*   **Vendredi midi : Potage**
+*   **Vendredi soir : Rôti de porc au miel**
+
+**SAMEDI**
+*   **Samedi midi : Bouchées à la Reine**
+*   **Samedi soir : Invité(e)**`
+
+      const slots = parsePlanningToWeekSlots(text, mondayIso)
+      expect(slots.length).toBe(11) // 12 créneaux moins Invité(e) ignoré
+      const lundiMidi = slots.find((s) => s.date === "2026-10-26" && s.kind === "dejeuner")
+      expect(lundiMidi?.mealName).toBe("Salade")
+      const lundiSoir = slots.find((s) => s.date === "2026-10-26" && s.kind === "diner")
+      expect(lundiSoir?.mealName).toBe("Potage légumes")
+      const jeudiMidi = slots.find((s) => s.date === "2026-10-29" && s.kind === "dejeuner")
+      expect(jeudiMidi?.mealName).toBe("Restaurant")
     })
   })
 })
