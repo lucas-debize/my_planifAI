@@ -45,10 +45,8 @@ describe("Extraction d'images de planning repas (AI Vision)", () => {
     })
     const formData = new FormData()
     formData.append("image", fakeImage)
-
-    expect(extractRecipeFromImageAction(formData)).rejects.toThrow(
-      "Aucune clé Vision IA n'est configurée"
-    )
+    const res = await extractRecipeFromImageAction(formData)
+    expect(res.noVisionKey).toBe(true)
   })
 
   it("accepte une clé personnalisée passée dans le formulaire", async () => {

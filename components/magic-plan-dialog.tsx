@@ -42,7 +42,7 @@ import {
   getDefaultRecipeForDish,
   type ExtractedRecipe,
 } from "@/lib/ai/recipe-extractor"
-import { scanImageClient, getStoredUserAiKey } from "@/lib/ai/client-scan"
+import { scanImageClient } from "@/lib/ai/client-scan"
 import { applyAutoPlanAction } from "@/lib/actions/auto-plan"
 import { optimizeImageForOcr } from "@/lib/images/optimize"
 import { actionErrorMessage } from "@/lib/errors"
@@ -220,10 +220,6 @@ function MagicPlanModalContent({
           setScanStatus("Préparation de l'image...")
           const formData = new FormData()
           formData.append("image", photoFile)
-          const savedKey = getStoredUserAiKey()
-          if (savedKey) {
-            formData.append("customApiKey", savedKey)
-          }
           const result = await scanImageClient(formData, (percent, label) => {
             setScanStatus(`${label} (${percent}%)`)
           })

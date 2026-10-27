@@ -8,7 +8,6 @@ import {
   ChevronUp,
   Globe,
   Image as ImageIcon,
-  Key,
   Layers,
   Loader2,
   Pencil,
@@ -33,7 +32,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { extractRecipeAction } from "@/lib/actions/ai"
-import { scanImageClient, getStoredUserAiKey, setStoredUserAiKey } from "@/lib/ai/client-scan"
+import { scanImageClient } from "@/lib/ai/client-scan"
 import { batchCreateMealsAction, upsertMeal } from "@/lib/actions/meals"
 import {
   extractRecipeFromText,
@@ -78,9 +77,6 @@ export function MagicRecipeDialog({
 
   const [isPending, startTransition] = useTransition()
   const [importMode, setImportMode] = useState<"planning" | "recipe">("planning")
-  const [userApiKey, setUserApiKey] = useState(() => getStoredUserAiKey())
-  const [showApiKeyInput, setShowApiKeyInput] = useState(false)
-  const [tempApiKey, setTempApiKey] = useState("")
   const [scanStatus, setScanStatus] = useState<string | null>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -131,14 +127,10 @@ export function MagicRecipeDialog({
 
       startTransition(async () => {
         try {
-          setScanStatus("Préparation de l'image...")
+          setScanStatus("Analyse de la photo...")
           const formData = new FormData()
           formData.append("image", photoFile)
           formData.append("importMode", importMode)
-          const savedKey = userApiKey || getStoredUserAiKey()
-          if (savedKey) {
-            formData.append("customApiKey", savedKey)
-          }
           const result = await scanImageClient(formData, (percent, label) => {
             setScanStatus(`${label} (${percent}%)`)
           })
@@ -158,11 +150,7 @@ export function MagicRecipeDialog({
             )
           }
         } catch (err) {
-          const msg = actionErrorMessage(err)
-          if (msg.includes("clé Vision IA") || msg.includes("Aucune clé")) {
-            setShowApiKeyInput(true)
-          }
-          toast.error(msg)
+          toast.error(actionErrorMessage(err))
         } finally {
           setScanStatus(null)
         }
@@ -721,57 +709,7 @@ export function MagicRecipeDialog({
                   📷 <strong>Sur iPhone</strong> : le bouton « Prendre une photo » ouvre directement votre appareil photo dorsal.
                 </p>
 
-                <div className="rounded-lg border border-line/60 bg-muted/20 p-2 text-xs">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 text-muted-foreground">
-                      <Key className="size-3.5" />
-                      <span>
-                        {userApiKey ? "Clé Vision active sur cet appareil" : "Clé Vision IA (Gemini, GLM, OpenAI)"}
-                      </span>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 px-2 text-[11px]"
-                      onClick={() => {
-                        setTempApiKey(userApiKey)
-                        setShowApiKeyInput(!showApiKeyInput)
-                      }}
-                    >
-                      {userApiKey ? (showApiKeyInput ? "Fermer" : "Modifier") : (showApiKeyInput ? "Fermer" : "Configurer")}
-                    </Button>
-                  </div>
-                  {showApiKeyInput ? (
-                    <div className="mt-2 flex flex-col gap-1.5 pt-1.5 border-t border-line/40">
-                      <p className="text-[11px] text-muted-foreground">
-                        Si votre serveur Vercel n&apos;a pas de clé configurée, collez votre clé ici (ex: Gemini gratuite sur aistudio.google.com). Elle est conservée dans votre navigateur.
-                      </p>
-                      <div className="flex gap-1.5">
-                        <Input
-                          type="password"
-                          placeholder="AIzaSy... ou clé GLM / OpenAI"
-                          value={tempApiKey}
-                          onChange={(e) => setTempApiKey(e.target.value)}
-                          className="h-7 text-xs"
-                        />
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="h-7 px-2.5 text-xs"
-                          onClick={() => {
-                            setStoredUserAiKey(tempApiKey)
-                            setUserApiKey(tempApiKey.trim())
-                            setShowApiKeyInput(false)
-                            toast.success(tempApiKey.trim() ? "Clé Vision enregistrée !" : "Clé Vision supprimée")
-                          }}
-                        >
-                          OK
-                        </Button>
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
+
               </div>
             )}
 

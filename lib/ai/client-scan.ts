@@ -2,22 +2,6 @@ import type { ExtractedImageResult } from "@/lib/actions/ai"
 import { extractRecipeFromImageAction } from "@/lib/actions/ai"
 import { extractMealsFromText } from "@/lib/ai/recipe-extractor"
 import { createWorker } from "tesseract.js"
-export const USER_AI_KEY_STORAGE = "planifia_user_ai_key"
-
-export function getStoredUserAiKey(): string {
-  if (typeof window === "undefined") return ""
-  return localStorage.getItem(USER_AI_KEY_STORAGE) ?? ""
-}
-
-export function setStoredUserAiKey(key: string): void {
-  if (typeof window === "undefined") return
-  const clean = key.trim()
-  if (clean) {
-    localStorage.setItem(USER_AI_KEY_STORAGE, clean)
-  } else {
-    localStorage.removeItem(USER_AI_KEY_STORAGE)
-  }
-}
 
 export async function performClientOcr(
   file: File,
@@ -45,13 +29,6 @@ export async function scanImageClient(
   formData: FormData,
   onProgress?: (percent: number, label: string) => void
 ): Promise<ExtractedImageResult & { usedClientOcr?: boolean }> {
-  // Injecter la clé personnalisée si stockée dans le navigateur et non encore fournie
-  if (!formData.has("customApiKey")) {
-    const saved = getStoredUserAiKey()
-    if (saved) {
-      formData.append("customApiKey", saved)
-    }
-  }
 
   const file = formData.get("image") as File | null
 
@@ -76,7 +53,7 @@ export async function scanImageClient(
         const ocrText = await performClientOcr(file, onProgress)
         if (!ocrText || ocrText.trim().length < 5) {
           throw new Error(
-            "Le déchiffrement local gratuit n'a trouvé aucun texte lisible. Pour des notes manuscrites complexes, vous pouvez utiliser une clé gratuite Google Gemini (sur aistudio.google.com sans carte bancaire) ou saisir le texte directement."
+            "L'écriture manuscrite sur cette photo n'a pas pu être déchiffrée par l'OCR local. Vous pouvez utiliser l'onglet Texte pour dicter vos repas au micro en 10 secondes ou saisir le texte directement."
           )
         }
         const result = extractMealsFromText(ocrText, "image")

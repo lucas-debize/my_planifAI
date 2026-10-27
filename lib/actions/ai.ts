@@ -11,6 +11,8 @@ export type ExtractedImageResult = {
   transcribedText: string
   result: ExtractedMealBatch
   recipe: ExtractedRecipe
+  noVisionKey?: boolean
+  error?: string
 }
 
 const VISION_PROMPT = `Tu es un assistant culinaire expert. Analyse attentivement cette photo et identifie sa nature :
@@ -81,11 +83,8 @@ export async function transcribeImageBuffer(
       : undefined)
 
   if (!geminiKey && !openaiKey && !glmKey) {
-    throw new Error(
-      "Aucune clé Vision IA n'est configurée. Pour déchiffrer des photos de plannings et recettes, entrez votre clé d'API (Gemini gratuite, GLM ou OpenAI) ci-dessous ou configurez-la sur Vercel."
-    )
+    throw new Error("NO_VISION_KEY")
   }
-
   // 1. Mode Gemini Vision si configuré (ultra-rapide : ~1.5s)
   if (geminiKey) {
     try {
@@ -273,6 +272,14 @@ export async function extractRecipeFromImageAction(
   try {
     transcribedText = await transcribeImageBuffer(buffer, mimeType, customApiKey)
   } catch (err) {
+    if (err instanceof Error && err.message.includes("NO_VISION_KEY")) {
+      return {
+        transcribedText: "",
+        result: { kind: "single", meals: [], source: "image" },
+        recipe: { title: "", ingredients: [], detailedIngredients: [], source: "image" },
+        noVisionKey: true,
+      }
+    }
     throw new Error(
       err instanceof Error
         ? `Erreur lors de la lecture de l'image : ${err.message}`

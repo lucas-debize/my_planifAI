@@ -3,7 +3,15 @@ export function actionErrorMessage(
   fallback = "Impossible d’enregistrer. Réessaie."
 ): string {
   const message = error instanceof Error ? error.message : String(error ?? "")
-  if (!message || message === "Error" || message === "[object Object]") return fallback
+  if (
+    !message ||
+    message === "Error" ||
+    message === "[object Object]" ||
+    message.includes("Minified React error") ||
+    message.includes("Server Components render")
+  ) {
+    return fallback
+  }
   if (message === "NAME_REQUIRED") return "Donne un nom au plat."
   if (message === "INGREDIENT_NAME_REQUIRED") {
     return "Donne un nom à l’ingrédient."
