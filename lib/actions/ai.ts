@@ -66,11 +66,16 @@ export async function transcribeImageBuffer(
   // 1. Mode Gemini Vision si configuré (ultra-rapide : ~1.5s)
   if (geminiKey) {
     try {
-      const geminiUrls = [
-        `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${geminiKey}`,
-        `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
+      const models = [
+        "gemini-flash-latest",
+        "gemini-3.5-flash",
+        "gemini-3.7-flash",
+        "gemini-3.8-flash",
       ]
+      const geminiUrls = models.map(
+        (m) =>
+          `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${geminiKey}`
+      )
       for (const url of geminiUrls) {
         try {
           const geminiPayload = JSON.stringify({
