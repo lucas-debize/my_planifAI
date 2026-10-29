@@ -1,111 +1,108 @@
 import type { ExtractedImageResult } from "@/lib/actions/ai"
-import { extractRecipeFromImageAction } from "@/lib/actions/ai"
-import { extractMealsFromText } from "@/lib/ai/recipe-extractor"
-import { createWorker } from "tesseract.js"
 
-export async function performClientOcr(
-  file: File,
-  onProgress?: (percent: number, label: string) => void
-): Promise<string> {
-  const worker = await createWorker("fra", 1, {
-    logger: (m) => {
-      if (m.status === "recognizing text" && typeof m.progress === "number") {
-        onProgress?.(Math.round(m.progress * 100), "Déchiffrement gratuit...")
-      } else if (typeof m.progress === "number") {
-        onProgress?.(Math.round(m.progress * 100), "Préparation de l'OCR...")
-      }
-    },
-  })
+function isSource(value: unknown): value is ExtractedImageResult["recipe"]["source"] {
+  return value === undefined || value === "url" || value === "text" ||
+    value === "json-ld" || value === "image"
+}
 
-  try {
-    const res = await worker.recognize(file)
-    return res.data.text ?? ""
-  } finally {
-    await worker.terminate()
-  }
+function isRecipe(value: unknown): value is ExtractedImageResult["recipe"] {
+  return typeof value === "object" && value !== null &&
+    "title" in value && typeof value.title === "string" && value.title.trim().length > 0 &&
+    "ingredients" in value && Array.isArray(value.ingredients) &&
+    value.ingredients.every((ingredient) => typeof ingredient === "string") &&
+    "detailedIngredients" in value && Array.isArray(value.detailedIngredients) &&
+    value.detailedIngredients.every((ingredient: unknown) =>
+      typeof ingredient === "object" && ingredient !== null &&
+      "name" in ingredient && typeof ingredient.name === "string" &&
+      "raw" in ingredient && typeof ingredient.raw === "string" &&
+      (!("quantity" in ingredient) || ingredient.quantity === undefined ||
+        typeof ingredient.quantity === "string")
+    ) &&
+    (!("source" in value) || isSource(value.source)) &&
+    (!("isDefaultRecipe" in value) || value.isDefaultRecipe === undefined ||
+      typeof value.isDefaultRecipe === "boolean")
+}
+
+function isImageResult(value: unknown): value is ExtractedImageResult {
+  return typeof value === "object" && value !== null &&
+    "transcribedText" in value && typeof value.transcribedText === "string" &&
+    value.transcribedText.trim().length > 0 &&
+    "result" in value && typeof value.result === "object" && value.result !== null &&
+    "kind" in value.result && (value.result.kind === "single" || value.result.kind === "list") &&
+    "meals" in value.result && Array.isArray(value.result.meals) &&
+    value.result.meals.length > 0 && value.result.meals.every(isRecipe) &&
+    (!("source" in value.result) || isSource(value.result.source)) &&
+    "recipe" in value && isRecipe(value.recipe) &&
+    (!("noVisionKey" in value) || value.noVisionKey === undefined || value.noVisionKey === false) &&
+    (!("error" in value) || value.error === undefined || value.error === "")
 }
 
 export async function scanImageClient(
   formData: FormData,
   onProgress?: (percent: number, label: string) => void
 ): Promise<ExtractedImageResult & { usedClientOcr?: boolean }> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 58000)
+  const timeoutMessage =
+    "L'analyse de la photo a dépassé le délai du serveur. Réessayez avec une photo plus nette ou utilisez l'onglet Texte / Dictée."
 
-  const file = formData.get("image") as File | null
-
-  // 1. Tenter via l'API Route avec les modèles Vision IA (maxDuration = 60s sur Vercel)
   try {
     onProgress?.(10, "Envoi au déchiffreur IA...")
-    const res = await fetch("/api/ai/scan-image", {
+    const response = await fetch("/api/ai/scan-image", {
       method: "POST",
       body: formData,
-      signal: AbortSignal.timeout(52000),
+      signal: controller.signal,
     })
 
-    const data = await res.json()
-    if (res.ok) {
-      return data as ExtractedImageResult
+    if (response.status === 504 || response.status === 408) {
+      throw new Error(timeoutMessage)
     }
 
-    // Si aucune clé IA configurée, basculer immédiatement et gratuitement sur l'OCR local
-    if (data.code === "NO_VISION_KEY" || data.error?.includes("Aucune clé Vision IA")) {
-      if (file) {
-        onProgress?.(20, "Déchiffrement 100% gratuit en local...")
-        const ocrText = await performClientOcr(file, onProgress)
-        if (!ocrText || ocrText.trim().length < 5) {
-          throw new Error(
-            "L'écriture manuscrite sur cette photo n'a pas pu être déchiffrée par l'OCR local. Vous pouvez utiliser l'onglet Texte pour dicter vos repas au micro en 10 secondes ou saisir le texte directement."
-          )
-        }
-        const result = extractMealsFromText(ocrText, "image", "list")
-        const recipe = result.meals[0] || {
-          title: "Nouvelle recette",
-          ingredients: [],
-          detailedIngredients: [],
-          source: "image" as const,
-        }
-        return {
-          transcribedText: ocrText,
-          result,
-          recipe,
-          usedClientOcr: true,
-        }
-      }
+    const responseError = response.ok
+      ? "Le serveur a renvoyé une analyse de photo invalide. Réessayez ou utilisez l'onglet Texte / Dictée."
+      : `L'analyse de la photo a échoué (HTTP ${response.status}). Réessayez ou utilisez l'onglet Texte / Dictée.`
+
+    const contentType = response.headers.get("content-type")?.toLowerCase() || ""
+    if (!contentType.includes("application/json") && !contentType.includes("+json")) {
+      throw new Error(responseError)
     }
 
-    throw new Error(data.error || `Erreur d'analyse (${res.status})`)
-  } catch (apiErr) {
-    if (apiErr instanceof Error && apiErr.name === "TimeoutError") {
+    let data: unknown
+    try {
+      data = await response.json()
+    } catch {
+      throw new Error(responseError)
+    }
+
+    if (typeof data === "object" && data !== null &&
+      (("code" in data && data.code === "NO_VISION_KEY") ||
+        ("noVisionKey" in data && data.noVisionKey === true))) {
       throw new Error(
-        "L'analyse par l'IA a pris trop de temps (délai dépassé). Réessayez avec une photo plus nette ou utilisez l'onglet Texte / Dictée."
+        "Aucune clé Vision IA n'est configurée. L'OCR local ne reconnaît pas assez fiablement les plannings manuscrits et n'est pas lancé automatiquement. Configurez une clé Vision IA ou utilisez l'onglet Texte / Dictée."
       )
     }
 
-    // Si l'erreur signale l'absence de clé, basculer sur l'OCR local gratuit
-    if (
-      file &&
-      apiErr instanceof Error &&
-      (apiErr.message.includes("Aucune clé Vision IA") || apiErr.message.includes("NO_VISION_KEY"))
-    ) {
-      onProgress?.(20, "Déchiffrement 100% gratuit en local...")
-      const ocrText = await performClientOcr(file, onProgress)
-      if (ocrText && ocrText.trim().length >= 5) {
-        const result = extractMealsFromText(ocrText, "image", "list")
-        const recipe = result.meals[0] || {
-          title: "Nouvelle recette",
-          ingredients: [],
-          detailedIngredients: [],
-          source: "image" as const,
-        }
-        return {
-          transcribedText: ocrText,
-          result,
-          recipe,
-          usedClientOcr: true,
-        }
-      }
+    if (typeof data === "object" && data !== null && "error" in data &&
+      typeof data.error === "string" && data.error.trim()) {
+      throw new Error(data.error.trim())
     }
 
-    // 2. Dernier repli : Server Action
-    return extractRecipeFromImageAction(formData)
+    if (!response.ok || !isImageResult(data)) {
+      throw new Error(responseError)
+    }
+
+    return data
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error(timeoutMessage)
+    }
+    if (error instanceof TypeError) {
+      throw new Error(
+        "Impossible de joindre le service d'analyse de photos. Vérifiez votre connexion et réessayez, ou utilisez l'onglet Texte / Dictée."
+      )
+    }
+    throw error
+  } finally {
+    clearTimeout(timeout)
   }
 }

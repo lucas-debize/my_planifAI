@@ -690,15 +690,17 @@ export function cleanDishName(rawName: string): string {
 }
 
 export const HEADER_LINE_REGEX =
-  /^(?:planning|menu|programme|repas|id[eé]es?\s+de\s+repas|semaine|liste\s+de\s+plats?)(?:\s+(?:de\s+la\s+semaine|semaine|\d+))?\s*:?$/i
+  /^(?:planning|menu|programme|repas|id[eé]es?\s+de\s+repas|semaine|liste\s+de\s+plats?)(?:\s+(?:de\s+la\s+semaine|semaine|\d+))?\s*:?\s*$/i
 
 export const DAY_PREFIX_LINE_REGEX =
-  /^(?:[-*•+–—\s\d.)\]>]*\*{0,2})(?:(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)(?:\s*\*{0,2}\s+(midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter|cr[eé]neau\s*\d+))?|(midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter|cr[eé]neau\s*\d+))\s*\*{0,2}\s*[:\-–—.]\s*(.+)$/i
+  /^(?:[-*•+–—\s\d.)\]>]*\*{0,2})(?:(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)(?:\s*\(\d+\))?(?:\s*\*{0,2}\s+(midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter|cr[eé]neau\s*\d+))?|(midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter|cr[eé]neau\s*\d+))\s*\*{0,2}\s*[:\-–—.]\s*(.+)$/i
 
 export const DAY_STANDALONE_REGEX =
   /^(?:[-*•+–—\s\d.)\]>]*\*{0,2})(?:(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)(?:\s*\*{0,2}\s+(midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter))?|(midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter))\s*\*{0,2}\s*[:\-–—.]?\s*$/i
 
 const DAY_NAMES_LIST = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
+
+const PREAMBLE_LINE_REGEX = /^(?:let'?s\s+look\b|here\s+is\b|here'?s\b|voici\b)/i
 
 export function normalizeDayLines(lines: string[]): string[] {
   const result: string[] = []
@@ -715,14 +717,33 @@ export function normalizeDayLines(lines: string[]): string[] {
     const cleanNoMd = strippedLeading.replace(/\*\*/g, "").replace(/__/g, "").trim()
     if (!cleanNoMd) continue
 
-    // Ignorer les blocs de démarcation hors planning
+    if (PREAMBLE_LINE_REGEX.test(cleanNoMd)) continue
+
     if (
-      /^(?:Cas [A-C]|Recette|Ingr[eé]dients|Notes|Annotations|R[eé]capitulatif|PLAT\s*:|={2,}|-{3,})/i.test(
-        cleanNoMd
-      )
+      HEADER_LINE_REGEX.test(cleanNoMd) ||
+      /^(?:Cas\s+[A-C]\b|Recette\b|Ingr[eé]dients?\b|Notes?\b|Annotations?\b|R[eé]capitulatif\b|PLAT\s*:|={2,}|-{3,})/i.test(cleanNoMd)
     ) {
+      currentDay = ""
+      currentSlot = ""
+      mealsUnderCurrentDay = 0
       result.push(line)
       continue
+    }
+
+    // Cas 0 : Ligne avec notations midi/soir entre parenthèses : "Samedi : Plat 1 (midi), Plat 2 (soir)"
+    const parenParen = cleanNoMd.match(
+      /^([a-zà-ÿ]+)(?:\s*\(\d+\))?\s*[:\-–—.]\s*(.+?)\s*\(midi\)\s*(?:[|/;,]|\bet\b)?\s*(.+?)\s*\(soir\)\s*[.!]?\s*$/i
+    )
+    if (parenParen) {
+      const day = parenParen[1].toLowerCase()
+      if (DAY_NAMES_LIST.includes(day)) {
+        result.push(`${day} midi : ${parenParen[2].trim()}`)
+        result.push(`${day} soir : ${parenParen[3].trim()}`)
+        currentDay = day
+        currentSlot = ""
+        mealsUnderCurrentDay = 2
+        continue
+      }
     }
 
     // Cas 1 : Ligne composée "Lundi midi : ... | soir : ..." ou "/ soir : ..."
@@ -743,7 +764,7 @@ export function normalizeDayLines(lines: string[]): string[] {
 
     // Cas 2 : Ligne commençant par un jour ET un créneau avec plat (ex: "Lundi midi : Salade")
     const daySlotMatch = cleanNoMd.match(
-      /^(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\s+(midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter)\s*[:\-–—.]\s*(.+)$/i
+      /^(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)(?:\s*\(\d+\))?\s+(midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter)\s*[:\-–—.]\s*(.+)$/i
     )
     if (daySlotMatch) {
       const day = daySlotMatch[1].toLowerCase()
@@ -758,7 +779,7 @@ export function normalizeDayLines(lines: string[]): string[] {
 
     // Cas 2b : Jour ET créneau SEULS sur la ligne (ex: "LUNDI MIDI")
     const daySlotOnlyMatch = cleanNoMd.match(
-      /^(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\s+(midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter)\s*[:\-–—.]?\s*$/i
+      /^(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)(?:\s*\(\d+\))?\s+(midi|soir|d[eé]jeuner|d[iî]ner|matin|go[uû]ter)\s*[:\-–—.]?\s*$/i
     )
     if (daySlotOnlyMatch) {
       currentDay = daySlotOnlyMatch[1].toLowerCase()
@@ -769,7 +790,7 @@ export function normalizeDayLines(lines: string[]): string[] {
 
     // Cas 3 : Ligne étant uniquement un nom de jour (ex: "SAMEDI", "### **Lundi**", "Lundi :")
     const dayOnlyMatch = cleanNoMd.match(
-      /^(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\s*[:\-–—.]?\s*$/i
+      /^(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)(?:\s*\(\d+\))?\s*[:\-–—.]?\s*$/i
     )
     if (dayOnlyMatch) {
       currentDay = dayOnlyMatch[1].toLowerCase()
@@ -780,7 +801,7 @@ export function normalizeDayLines(lines: string[]): string[] {
 
     // Cas 4 : Ligne commençant par un jour suivi d'un plat (ex: "Samedi - Haricot vert / Poisson" ou "Lundi : Pâtes")
     const dayDishMatch = cleanNoMd.match(
-      /^(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\s*[:\-–—.]\s*(.+)$/i
+      /^(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)(?:\s*\(\d+\))?\s*[:\-–—.]\s*(.+)$/i
     )
     if (dayDishMatch) {
       currentDay = dayDishMatch[1].toLowerCase()
@@ -1226,7 +1247,10 @@ export function extractMealsFromText(
   }
 
   // Plat unique
-  const single = parseSingleRecipe(rawText, source)
+  const single = parseSingleRecipe(
+    lines.filter((line) => !HEADER_LINE_REGEX.test(line.trim())).join("\n"),
+    source
+  )
   if (single.detailedIngredients.length === 0 && single.title && single.title !== "Nouvelle recette") {
     const defaultIngs = getDefaultRecipeForDish(single.title)
     single.detailedIngredients = defaultIngs
@@ -1261,19 +1285,24 @@ const DAY_NAME_TO_INDEX: Record<string, number> = {
 
 /**
  * Découpe un texte issu d'une photo ou d'un semainier texte pour l'assigner directement
- * aux créneaux midi/soir de la semaine choisie.
+ * aux créneaux midi/soir des sept jours à partir de la date choisie.
+ * La première série de lignes d'un jour est retenue si ce jour réapparaît plus loin.
  */
 export function parsePlanningToWeekSlots(
   rawText: string,
-  mondayIso: string
+  weekStartIso: string
 ): ParsedWeekSlot[] {
   const rawLines = rawText.split(/\r?\n/)
   const lines = normalizeDayLines(rawLines)
   const results: ParsedWeekSlot[] = []
-  const monday = parseISODate(mondayIso)
-  if (!monday) return []
+  const weekStart = parseISODate(weekStartIso)
+  if (!weekStart) return []
+  const startDayIndex = (weekStart.getDay() + 6) % 7
 
   const assignedPerDay: Record<number, { lunch?: boolean; dinner?: boolean }> = {}
+  const seenDays = new Set<string>()
+  let currentDay = ""
+  let repeatedDay = false
 
   for (const line of lines) {
     const trimmed = line.trim()
@@ -1282,6 +1311,12 @@ export function parsePlanningToWeekSlots(
     const match = trimmed.match(DAY_PREFIX_LINE_REGEX)
     if (match) {
       const dayName = match[1]?.toLowerCase()
+      if (dayName && dayName !== currentDay) {
+        currentDay = dayName
+        repeatedDay = seenDays.has(dayName)
+        seenDays.add(dayName)
+      }
+      if (repeatedDay) continue
       const slotName = (match[2] || match[3])?.toLowerCase() ?? ""
       const dishRaw = match[4] || match[2]
       const dishName = cleanDishName(dishRaw)
@@ -1289,7 +1324,7 @@ export function parsePlanningToWeekSlots(
 
       let dayIndex: number | null = null
       if (dayName && dayName in DAY_NAME_TO_INDEX) {
-        dayIndex = DAY_NAME_TO_INDEX[dayName]
+        dayIndex = (DAY_NAME_TO_INDEX[dayName] - startDayIndex + 7) % 7
       }
 
       if (dayIndex === null) continue
@@ -1311,17 +1346,14 @@ export function parsePlanningToWeekSlots(
         }
       }
 
-      // Si le créneau prévu est déjà occupé pour ce jour, basculer sur l'autre s'il est libre
-      if (kind === "dejeuner" && assignedPerDay[dayIndex]?.lunch && !assignedPerDay[dayIndex]?.dinner) {
-        kind = "diner"
-      } else if (kind === "diner" && assignedPerDay[dayIndex]?.dinner && !assignedPerDay[dayIndex]?.lunch) {
-        kind = "dejeuner"
-      } else if (assignedPerDay[dayIndex]?.lunch && assignedPerDay[dayIndex]?.dinner) {
-        // Les deux créneaux du jour sont déjà occupés
+      if (
+        (kind === "dejeuner" && assignedPerDay[dayIndex]?.lunch) ||
+        (kind === "diner" && assignedPerDay[dayIndex]?.dinner)
+      ) {
         continue
       }
 
-      const dateStr = toISODate(addDays(monday, dayIndex))
+      const dateStr = toISODate(addDays(weekStart, dayIndex))
       if (!assignedPerDay[dayIndex]) assignedPerDay[dayIndex] = {}
       if (kind === "dejeuner") assignedPerDay[dayIndex].lunch = true
       else assignedPerDay[dayIndex].dinner = true

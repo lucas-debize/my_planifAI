@@ -345,6 +345,8 @@ Ingrédients :
       expect(batch.meals[1].title).toBe("Quiche lorraine")
       expect(batch.meals[1].isDefaultRecipe).toBe(false)
       expect(batch.meals[1].detailedIngredients.length).toBe(2)
+      expect(batch.meals[0].detailedIngredients.map((i) => i.quantity)).toEqual(["300g", "400g"])
+      expect(batch.meals[1].detailedIngredients.map((i) => i.quantity)).toEqual(["1", "200g"])
     })
 
     it("attribue une recette par défaut pour un plat unique sans ingrédients", () => {
@@ -403,6 +405,28 @@ Ingrédients :
       expect(patesJambon).toBeDefined()
       expect(patesJambon?.isDefaultRecipe).toBe(true)
     })
+
+    it("ignore les phrases d'introduction sans supprimer les vrais noms de plats", () => {
+      const text = `Let's look at the sequence.
+Here is the meal plan:
+Voici les plats reconnus :
+Repas
+- Repas de fête
+- Menu végétarien
+- Soupe de légumes`
+
+      const batch = extractMealsFromText(text, "text", "list")
+      expect(batch.meals.map((meal) => meal.title)).toEqual([
+        "Repas de fête",
+        "Menu végétarien",
+        "Soupe de légumes",
+      ])
+    })
+
+    it("ne transforme pas le préambule d'une recette unique en plat", () => {
+      const batch = extractMealsFromText("Voici la recette reconnue :\nLasagnes maison")
+      expect(batch.meals.map((meal) => meal.title)).toEqual(["Lasagnes maison"])
+    })
   })
 
   describe("cleanDishName", () => {
@@ -436,6 +460,22 @@ Ingrédients :
         "lundi soir : Salade",
         "mardi midi : Quiche",
         "mardi soir : Soupe",
+      ])
+    })
+
+    it("préserve les blocs PLAT et leurs ingrédients après un jour de planning", () => {
+      const lines = [
+        "Lundi midi : Salade",
+        "=== PLAT : Quiche lorraine ===",
+        "Ingrédients :",
+        "- 1 pâte brisée",
+        "- 200g lardons",
+        "---",
+        "Récapitulatif du planning :",
+      ]
+      expect(normalizeDayLines(lines)).toEqual([
+        "lundi midi : Salade",
+        ...lines.slice(1),
       ])
     })
   })
@@ -475,6 +515,65 @@ Ingrédients :
 
   describe("parsePlanningToWeekSlots - Support des photos de plannings réels", () => {
     const mondayIso = "2026-10-26"
+
+    it("respecte les jours réels d'une semaine commençant le samedi", () => {
+      const text = `Samedi - Haricot vert / Poisson
+- Panini
+Dimanche - Steak / Patate
+- Nems / Riz cantonais
+Lundi - Reste
+- Tartiflette`
+
+      expect(parsePlanningToWeekSlots(text, "2026-10-31")).toEqual([
+        { date: "2026-10-31", kind: "dejeuner", mealName: "Haricot vert / Poisson" },
+        { date: "2026-10-31", kind: "diner", mealName: "Panini" },
+        { date: "2026-11-01", kind: "dejeuner", mealName: "Steak / Patate" },
+        { date: "2026-11-01", kind: "diner", mealName: "Nems / Riz cantonais" },
+        { date: "2026-11-02", kind: "dejeuner", mealName: "Reste" },
+        { date: "2026-11-02", kind: "diner", mealName: "Tartiflette" },
+      ])
+    })
+
+    it("garde le premier samedi sans le compléter avec celui de la semaine suivante", () => {
+      const text = `Samedi (1) : Salade (midi), (non renseigné) (soir)
+Dimanche midi : Poisson
+Lundi soir : Pâtes
+Vendredi soir : Tacos
+Samedi (2) : Pizza (midi), Panini (soir)`
+
+      expect(parsePlanningToWeekSlots(text, "2026-10-31")).toEqual([
+        { date: "2026-10-31", kind: "dejeuner", mealName: "Salade" },
+        { date: "2026-11-01", kind: "dejeuner", mealName: "Poisson" },
+        { date: "2026-11-02", kind: "diner", mealName: "Pâtes" },
+        { date: "2026-11-06", kind: "diner", mealName: "Tacos" },
+      ])
+    })
+
+    it("ne déplace pas un doublon de déjeuner vers un dîner vide", () => {
+      expect(parsePlanningToWeekSlots(
+        "Samedi midi : Salade\nSamedi midi : Pizza",
+        "2026-10-31"
+      )).toEqual([
+        { date: "2026-10-31", kind: "dejeuner", mealName: "Salade" },
+      ])
+    })
+
+    it("ignore le préambule et les cases vides sans créer de repas", () => {
+      const text = `Let's look at the sequence.
+Voici le planning :
+Samedi
+Here is the first day:
+Midi : *(non renseigné)*
+Soir : Panini
+Dimanche (1) : Poisson (midi), Soupe (soir)
+Lundi midi : Rien`
+
+      expect(parsePlanningToWeekSlots(text, "2026-10-31")).toEqual([
+        { date: "2026-10-31", kind: "diner", mealName: "Panini" },
+        { date: "2026-11-01", kind: "dejeuner", mealName: "Poisson" },
+        { date: "2026-11-01", kind: "diner", mealName: "Soupe" },
+      ])
+    })
 
     it("découpe un semainier format liste markdown avec lignes composées (Photo 1)", () => {
       const text = `• **Lundi** midi : Courgette viande hachée pâtes | soir : Poisson à la bordelaise fondue de poireaux  

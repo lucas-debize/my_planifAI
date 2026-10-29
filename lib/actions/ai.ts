@@ -15,27 +15,45 @@ export type ExtractedImageResult = {
   error?: string
 }
 
-const VISION_PROMPT = `Tu es un assistant culinaire expert. Analyse attentivement cette photo de planning de repas ou semainier (menu de la semaine, tableau de repas, semainier imprimé ou cahier manuscrit).
+function readGeminiTranscription(data: unknown): string {
+  if (typeof data !== "object" || data === null || !("candidates" in data) || !Array.isArray(data.candidates)) {
+    throw new Error("Gemini n'a retourné aucune transcription.")
+  }
+  const candidate: unknown = data.candidates[0]
+  if (typeof candidate !== "object" || candidate === null || !("finishReason" in candidate)) {
+    throw new Error("La réponse de Gemini ne confirme pas la fin de la transcription.")
+  }
+  if (candidate.finishReason !== "STOP") {
+    throw new Error("Transcription incomplète : Gemini a interrompu la lecture. Aucun repas n'a été importé.")
+  }
+  if (!("content" in candidate) || typeof candidate.content !== "object" || candidate.content === null ||
+      !("parts" in candidate.content) || !Array.isArray(candidate.content.parts)) {
+    throw new Error("Gemini n'a retourné aucune transcription.")
+  }
+  const text: string[] = []
+  for (const part of candidate.content.parts) {
+    if (typeof part !== "object" || part === null || part.thought === true) continue
+    if (typeof part.text === "string") text.push(part.text)
+  }
+  const transcription = text.join("").trim()
+  if (!transcription) throw new Error("Gemini n'a retourné aucune transcription finale.")
+  return transcription
+}
 
-Retranscris tous les repas du planning par créneaux au format strict suivant (une ligne par créneau, sans astérisques ** ni puces) :
-Lundi midi : [Nom du plat]
-Lundi soir : [Nom du plat]
-Mardi midi : [Nom du plat]
-Mardi soir : [Nom du plat]
-Mercredi midi : [Nom du plat]
-Mercredi soir : [Nom du plat]
-Jeudi midi : [Nom du plat]
-Jeudi soir : [Nom du plat]
-Vendredi midi : [Nom du plat]
-Vendredi soir : [Nom du plat]
-Samedi midi : [Nom du plat]
-Samedi soir : [Nom du plat]
-Dimanche midi : [Nom du plat]
-Dimanche soir : [Nom du plat]
+const VISION_PROMPT = `Retranscris uniquement les repas réellement lisibles sur ce planning, en français, dans l'ordre de la photo.
+Une ligne par créneau, sans introduction, réflexion, markdown ni liste d'ingrédients.
+Format strict :
+Samedi midi : Haricots verts / Poisson
+Samedi soir : Panini
+Dimanche midi : Steak / Pommes de terre
 
-(Si les créneaux midi/soir ne sont pas explicitement notés, classe les repas dans l'ordre chronologique midi puis soir. Si un repas est un reste, écris simplement "Reste" ou "Reste de [nom]". Ignore les listes de courses annexes ou tâches ménagères).
-
-Réponds directement avec les lignes du planning sans aucun commentaire avant ni après.`
+Lis toute la photo jusqu'en bas, pas seulement les premiers jours.
+Sous chaque jour, la première ligne est le midi et la seconde le soir, sauf indication contraire.
+Conserve les accompagnements sur la même ligne que le plat.
+Transcris les restes comme "Reste" ou "Reste de [plat]".
+Pour une case vide, illisible ou barrée, écris "non renseigné" : n'invente aucun repas.
+Si un jour apparaît une seconde fois en fin de photo, conserve ces lignes à la fin sans les fusionner avec le premier.
+Ignore les annotations hors repas. Ne génère ni recette ni quantité.`
 
 export async function transcribeImageBuffer(
   buffer: Buffer,
@@ -61,6 +79,7 @@ export async function transcribeImageBuffer(
   if (!geminiKey && !openaiKey && !glmKey) {
     throw new Error("NO_VISION_KEY")
   }
+  const deadline = AbortSignal.timeout(45000)
   let lastProviderError = ""
 
   // 1. Mode Gemini Vision si configuré
@@ -84,8 +103,9 @@ export async function transcribeImageBuffer(
           },
         ],
         generationConfig: {
-          maxOutputTokens: 1000,
+          maxOutputTokens: 4096,
           temperature: 0.1,
+          thinkingConfig: { thinkingLevel: "MINIMAL", includeThoughts: false },
         },
       })
 
@@ -93,15 +113,12 @@ export async function transcribeImageBuffer(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: geminiPayload,
-        signal: AbortSignal.timeout(40000),
+        signal: AbortSignal.any([deadline, AbortSignal.timeout(40000)]),
       })
 
       if (response.ok) {
-        const data = await response.json()
-        const candText = data?.candidates?.[0]?.content?.parts?.[0]?.text
-        if (typeof candText === "string" && candText.trim().length > 0) {
-          return candText.trim()
-        }
+        const data: unknown = await response.json()
+        return readGeminiTranscription(data)
       } else {
         const errText = await response.text()
         lastProviderError = `[Gemini ${response.status}] ${errText}`
@@ -146,20 +163,18 @@ export async function transcribeImageBuffer(
                 ],
                 max_tokens: 3500,
               }),
-              signal: AbortSignal.timeout(35000),
+              signal: AbortSignal.any([deadline, AbortSignal.timeout(35000)]),
             }
           )
 
           if (response.ok) {
             const data = await response.json()
-            const rawContent = data?.choices?.[0]?.message?.content
-            const reasoningContent = data?.choices?.[0]?.message?.reasoning_content
-            const text =
-              typeof rawContent === "string" && rawContent.trim().length > 0
-                ? rawContent.trim()
-                : typeof reasoningContent === "string" && reasoningContent.trim().length > 0
-                  ? reasoningContent.trim()
-                  : undefined
+            const choice = data?.choices?.[0]
+            if (choice?.finish_reason && choice.finish_reason !== "stop") {
+              throw new Error("Transcription incomplète : le fournisseur a interrompu la lecture.")
+            }
+            const rawContent = choice?.message?.content
+            const text = typeof rawContent === "string" ? rawContent.trim() : undefined
             if (text) {
               return text
             }
@@ -206,7 +221,7 @@ export async function transcribeImageBuffer(
               ],
               max_tokens: 2500,
             }),
-            signal: AbortSignal.timeout(15000),
+            signal: AbortSignal.any([deadline, AbortSignal.timeout(15000)]),
           })
 
           if (response.ok) {

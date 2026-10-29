@@ -8,6 +8,11 @@ describe("Extraction d'images de planning repas (AI Vision)", () => {
 
   beforeEach(() => {
     process.env = { ...originalEnv }
+    delete process.env.GEMINI_API_KEY
+    delete process.env.OPENAI_API_KEY
+    delete process.env.GLM_API_KEY
+    delete process.env.ZHIPU_API_KEY
+    delete process.env.ZAI_API_KEY
   })
 
   afterEach(() => {
@@ -61,6 +66,7 @@ describe("Extraction d'images de planning repas (AI Vision)", () => {
           JSON.stringify({
             candidates: [
               {
+                finishReason: "STOP",
                 content: {
                   parts: [{ text: "Lundi midi : Tarte aux poireaux\nLundi soir : Soupe de légumes" }],
                 },
@@ -171,6 +177,7 @@ Ingrédients :
           JSON.stringify({
             candidates: [
               {
+                finishReason: "STOP",
                 content: {
                   parts: [{ text: fakeGeminiResponse }],
                 },
@@ -243,5 +250,41 @@ Lundi soir : Omelette aux champignons`
     expect(result.result.kind).toBe("list")
     expect(result.result.meals.length).toBe(2)
     expect(result.result.meals[0].isDefaultRecipe).toBe(true)
+  })
+
+  it("ignore la réflexion et assemble toute la transcription finale", async () => {
+    process.env.GEMINI_API_KEY = "test-gemini-key"
+    globalThis.fetch = async () => Response.json({
+      candidates: [{
+        finishReason: "STOP",
+        content: { parts: [
+          { thought: true, text: "Let's look at the sequence..." },
+          { text: "Samedi midi : Haricots verts / Poisson\n" },
+          { text: "Samedi soir : Panini\nDimanche midi : Steak / Patates" },
+        ] },
+      }],
+    })
+    const formData = new FormData()
+    formData.append("image", new File(["image"], "planning.png", { type: "image/png" }))
+    const result = await extractRecipeFromImageAction(formData)
+    expect(result.transcribedText).toBe(
+      "Samedi midi : Haricots verts / Poisson\nSamedi soir : Panini\nDimanche midi : Steak / Patates"
+    )
+    expect(result.result.meals.map((meal) => meal.title)).toEqual([
+      "Haricots verts / Poisson", "Panini", "Steak / Patates",
+    ])
+  })
+
+  it("refuse une réponse coupée au lieu d'importer trois repas comme un succès", async () => {
+    process.env.GEMINI_API_KEY = "test-gemini-key"
+    globalThis.fetch = async () => Response.json({
+      candidates: [{
+        finishReason: "MAX_TOKENS",
+        content: { parts: [{ text: "Samedi midi : Poisson\nSamedi soir : Panini\nDimanche" }] },
+      }],
+    })
+    const formData = new FormData()
+    formData.append("image", new File(["image"], "planning.png", { type: "image/png" }))
+    await expect(extractRecipeFromImageAction(formData)).rejects.toThrow("incomplète")
   })
 })
