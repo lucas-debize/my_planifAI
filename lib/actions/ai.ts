@@ -89,12 +89,22 @@ export async function transcribeImageBuffer(
         },
       })
 
-      const response = await fetch(url, {
+      let response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: geminiPayload,
-        signal: AbortSignal.timeout(35000),
+        signal: AbortSignal.timeout(20000),
       })
+
+      if (response.status === 503) {
+        const fallbackUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${geminiKey}`
+        response = await fetch(fallbackUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: geminiPayload,
+          signal: AbortSignal.timeout(20000),
+        })
+      }
 
       if (response.ok) {
         const data = await response.json()
