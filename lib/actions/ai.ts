@@ -66,7 +66,13 @@ export async function transcribeImageBuffer(
   // 1. Mode Gemini Vision si configuré (ultra-rapide : ~1.5s)
   if (geminiKey) {
     try {
-      const models = ["gemini-2.0-flash", "gemini-1.5-flash"]
+      const models = [
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-001",
+        "gemini-1.5-flash-latest",
+        "gemini-1.5-flash-8b",
+      ]
       for (const model of models) {
         try {
           const response = await fetch(
@@ -102,10 +108,10 @@ export async function transcribeImageBuffer(
             }
           } else {
             const errText = await response.text()
-            lastProviderError = `[Gemini ${model} ${response.status}] ${errText}`
+            lastProviderError += `[${model} ${response.status}: ${errText.slice(0, 120)}] `
           }
         } catch (fetchErr) {
-          lastProviderError = fetchErr instanceof Error ? fetchErr.message : String(fetchErr)
+          lastProviderError += `[${model} fetchErr: ${fetchErr instanceof Error ? fetchErr.message : String(fetchErr)}] `
         }
       }
     } catch (err) {
