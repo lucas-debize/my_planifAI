@@ -108,10 +108,8 @@ export async function transcribeImageBuffer(
             }
           } else {
             const errText = await response.text()
-            lastProviderError += `[${model} ${response.status}: ${errText.slice(0, 120)}] `
+            lastProviderError += `[${model}: ${errText}] `
           }
-        } catch (fetchErr) {
-          lastProviderError += `[${model} fetchErr: ${fetchErr instanceof Error ? fetchErr.message : String(fetchErr)}] `
         }
       }
     } catch (err) {
