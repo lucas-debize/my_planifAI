@@ -89,6 +89,10 @@ export async function transcribeImageBuffer(
                 ],
               },
             ],
+            generationConfig: {
+              maxOutputTokens: 1000,
+              temperature: 0.1,
+            },
           })
           const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`
           const headers = { "Content-Type": "application/json" }
