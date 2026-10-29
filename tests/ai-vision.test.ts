@@ -287,4 +287,60 @@ Lundi soir : Omelette aux champignons`
     formData.append("image", new File(["image"], "planning.png", { type: "image/png" }))
     await expect(extractRecipeFromImageAction(formData)).rejects.toThrow("incomplète")
   })
+
+  for (const status of [404, 429, 503]) {
+    it(`utilise l'autre modèle après un HTTP ${status} sans perdre les repas`, async () => {
+      process.env.GEMINI_API_KEY = "test-gemini-key"
+      let attempts = 0
+      globalThis.fetch = async () => {
+        attempts++
+        if (attempts === 1) return Response.json({ error: "Provider unavailable" }, { status })
+        return Response.json({
+          candidates: [{
+            finishReason: "STOP",
+            content: { parts: [{ text: "Samedi midi : Haricots verts / Poisson\nSamedi soir : Panini" }] },
+          }],
+        })
+      }
+      const formData = new FormData()
+      formData.append("image", new File(["image"], "planning.png", { type: "image/png" }))
+      const result = await extractRecipeFromImageAction(formData)
+      expect(parsePlanningToWeekSlots(result.transcribedText, "2026-10-31")).toEqual([
+        { date: "2026-10-31", kind: "dejeuner", mealName: "Haricots verts / Poisson" },
+        { date: "2026-10-31", kind: "diner", mealName: "Panini" },
+      ])
+      expect(attempts).toBe(2)
+    })
+  }
+
+  it("explique l'épuisement des quotas sans exposer la réponse brute Google", async () => {
+    process.env.GEMINI_API_KEY = "test-gemini-key"
+    globalThis.fetch = async () => Response.json(
+      { error: { message: "Private provider diagnostics", status: "RESOURCE_EXHAUSTED" } },
+      { status: 429 }
+    )
+    const formData = new FormData()
+    formData.append("image", new File(["image"], "planning.png", { type: "image/png" }))
+    try {
+      await extractRecipeFromImageAction(formData)
+      throw new Error("Le quota épuisé aurait dû interrompre l'import")
+    } catch (error) {
+      if (!(error instanceof Error)) throw error
+      expect(error.message).toContain("Quota IA")
+      expect(error.message).not.toContain("Private provider diagnostics")
+    }
+  })
+
+  it("ne répète pas une requête refusée pour autorisation", async () => {
+    process.env.GEMINI_API_KEY = "test-gemini-key"
+    let attempts = 0
+    globalThis.fetch = async () => {
+      attempts++
+      return Response.json({ error: "Forbidden" }, { status: 403 })
+    }
+    const formData = new FormData()
+    formData.append("image", new File(["image"], "planning.png", { type: "image/png" }))
+    await expect(extractRecipeFromImageAction(formData)).rejects.toThrow("Google refuse la clé Gemini")
+    expect(attempts).toBe(1)
+  })
 })

@@ -84,49 +84,57 @@ export async function transcribeImageBuffer(
   const deadline = AbortSignal.timeout(45000)
   let lastProviderError = ""
 
-  // 1. Mode Gemini Vision si configuré
   if (geminiKey) {
-    try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${geminiKey}`
-      const geminiPayload = JSON.stringify({
-        contents: [
+    const imageData = buffer.toString("base64")
+    const models = [
+      { name: "gemini-3.5-flash", thinkingLevel: "MINIMAL" },
+      { name: "gemini-3.8-flash", thinkingLevel: "LOW" },
+    ]
+    for (const model of models) {
+      if (deadline.aborted) break
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model.name}:generateContent?key=${geminiKey}`,
           {
-            parts: [
-              {
-                inlineData: {
-                  mimeType,
-                  data: buffer.toString("base64"),
-                },
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{
+                parts: [
+                  { inlineData: { mimeType, data: imageData } },
+                  { text: VISION_PROMPT },
+                ],
+              }],
+              generationConfig: {
+                maxOutputTokens: 4096,
+                temperature: 0.1,
+                thinkingConfig: { thinkingLevel: model.thinkingLevel, includeThoughts: false },
               },
-              {
-                text: VISION_PROMPT,
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          maxOutputTokens: 4096,
-          temperature: 0.1,
-          thinkingConfig: { thinkingLevel: "LOW", includeThoughts: false },
-        },
-      })
-
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: geminiPayload,
-        signal: AbortSignal.any([deadline, AbortSignal.timeout(40000)]),
-      })
-
-      if (response.ok) {
-        const data: unknown = await response.json()
-        return readGeminiTranscription(data)
-      } else {
-        const errText = await response.text()
-        lastProviderError = `[Gemini ${response.status}] ${errText}`
+            }),
+            signal: AbortSignal.any([deadline, AbortSignal.timeout(20000)]),
+          }
+        )
+        if (response.ok) {
+          const data: unknown = await response.json()
+          return readGeminiTranscription(data)
+        }
+        if (response.status === 429) {
+          lastProviderError = "Quota IA du jour atteint. Réessayez demain ou utilisez l'onglet Texte."
+        } else if (response.status === 404) {
+          lastProviderError = "Ce modèle IA n'est pas accessible avec votre clé. Utilisez l'onglet Texte ou vérifiez votre projet Google AI Studio."
+        } else if (response.status === 503) {
+          lastProviderError = "Le service IA est temporairement saturé. Réessayez plus tard ou utilisez l'onglet Texte."
+        } else {
+          lastProviderError = response.status === 401 || response.status === 403
+            ? "Google refuse la clé Gemini. Vérifiez la clé et les autorisations du projet Google AI Studio."
+            : `Le service d'analyse IA a échoué (HTTP ${response.status}). Utilisez l'onglet Texte ou réessayez plus tard.`
+          break
+        }
+      } catch (err) {
+        lastProviderError = err instanceof Error && err.name !== "TimeoutError" && err.name !== "AbortError"
+          ? err.message
+          : "Le service IA n'a pas répondu à temps. Réessayez plus tard ou utilisez l'onglet Texte."
       }
-    } catch (err) {
-      lastProviderError = err instanceof Error ? err.message : String(err)
     }
   }
 

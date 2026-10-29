@@ -42,7 +42,12 @@ for (const [index, image] of images.entries()) {
     }))
   } catch (error) {
     failures++
-    console.log(JSON.stringify({ image: basename(image), status: "FAIL", seconds: Number(((performance.now() - started) / 1000).toFixed(1)), error: error instanceof Error ? error.message : String(error) }))
+    const message = error instanceof Error ? error.message : String(error)
+    console.log(JSON.stringify({ image: basename(image), status: "FAIL", seconds: Number(((performance.now() - started) / 1000).toFixed(1)), error: message }))
+    if (/Quota IA|RESOURCE_EXHAUSTED|quota.*exceeded|exceeded.*quota/i.test(message)) {
+      console.warn("Quota atteint : arrêt des scans suivants pour éviter de nouveaux appels inutiles.")
+      break
+    }
   }
 }
 if (failures) process.exitCode = 1
