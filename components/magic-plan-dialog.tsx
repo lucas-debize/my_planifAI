@@ -119,6 +119,10 @@ function MagicPlanModalContent({
 
   const emptySlotsCount = slots.filter((s) => s.meal === null).length
   const effectiveWeekStart = weekStart ?? slots[0]?.slot_date ?? ""
+  const selectedScanSlots = detectedSlots.filter((slot) => slot.selected && slot.mealName.trim())
+  const firstScanDate = selectedScanSlots[0] ? parseISODate(selectedScanSlots[0].date) : null
+  const lastScanSlot = selectedScanSlots.at(-1)
+  const lastScanDate = lastScanSlot ? parseISODate(lastScanSlot.date) : null
 
   function generate(catalog = onlyCatalog, text = stockOrCravings) {
     const opts: AutoPlanOptions = {
@@ -286,7 +290,7 @@ function MagicPlanModalContent({
   }
 
   function handleApplyScan() {
-    const selected = detectedSlots.filter((s) => s.selected && s.mealName.trim())
+    const selected = selectedScanSlots
     if (selected.length === 0) {
       toast.error("Veuillez cocher au moins un créneau à appliquer.")
       return
@@ -327,7 +331,7 @@ function MagicPlanModalContent({
         const result = await applyAutoPlanAction(payload)
         onApplied(result.slots)
         toast.success(
-          `${result.count} créneau${result.count > 1 ? "s" : ""} rempli${result.count > 1 ? "s" : ""} depuis votre semainier !`
+          `${result.count} créneau${result.count > 1 ? "x" : ""} rempli${result.count > 1 ? "s" : ""} dans votre planning !`
         )
         onOpenChange(false)
       } catch (err) {
@@ -363,7 +367,7 @@ function MagicPlanModalContent({
             <DialogDescription className="text-xs text-muted-foreground">
               {activeTab === "generator"
                 ? "Complète intelligemment les créneaux vides en respectant l'équilibre alimentaire."
-                : "Photographiez votre semainier frigo, menu de cantine ou collez vos repas de la semaine."}
+                : "Photographiez votre planning ou collez vos repas, même sur plusieurs semaines."}
             </DialogDescription>
           </div>
         </div>
@@ -696,13 +700,13 @@ function MagicPlanModalContent({
                   <Textarea
                     value={textInput}
                     onChange={(e) => setTextInput(e.target.value)}
-                    placeholder={`Collez votre planning de la semaine...\n\nExemple :\nLundi midi : Poulet rôti et pommes de terre\nLundi soir : Salade composée\nMardi soir : Quiche lorraine\nMercredi midi : Pavé de saumon et riz`}
+                    placeholder={`Collez votre planning, même sur plusieurs semaines...\n\nExemple :\nSamedi midi : Poulet rôti et pommes de terre\nDimanche soir : Salade composée\nLundi midi : Quiche lorraine`}
                     rows={7}
                     className="resize-none font-sans text-xs"
                     disabled={isAnalyzing}
                   />
                   <p className="text-[11px] text-muted-foreground">
-                    ⚡ Reconnaît automatiquement les jours (Lundi...Dimanche) et créneaux (midi/soir).
+                    Les jours sont lus dans l&apos;ordre du planning, y compris sur les semaines suivantes.
                   </p>
                 </div>
               )}
@@ -745,9 +749,8 @@ function MagicPlanModalContent({
             <div className="flex flex-1 flex-col min-h-0 gap-3">
               <div className="flex items-center justify-between rounded-xl border border-line bg-muted/40 p-2.5">
                 <span className="text-xs font-semibold text-ink">
-                  {detectedSlots.filter((s) => s.selected).length} créneau
-                  {detectedSlots.filter((s) => s.selected).length > 1 ? "s" : ""} sélectionné
-                  {detectedSlots.filter((s) => s.selected).length > 1 ? "s" : ""}
+                  {selectedScanSlots.length} créneau{selectedScanSlots.length > 1 ? "x" : ""} sélectionné
+                  {selectedScanSlots.length > 1 ? "s" : ""}
                 </span>
                 <Button
                   type="button"
@@ -760,6 +763,11 @@ function MagicPlanModalContent({
                   Scanner à nouveau
                 </Button>
               </div>
+              {firstScanDate && lastScanDate ? (
+                <p className="text-[11px] text-muted-foreground">
+                  Du {slotTitleDate(firstScanDate)} au {slotTitleDate(lastScanDate)}
+                </p>
+              ) : null}
               <div className="flex-1 min-h-0 max-h-[50vh] overflow-y-auto overscroll-contain pr-1 touch-pan-y" style={{ WebkitOverflowScrolling: "touch" }}>
                 <div className="flex flex-col gap-2 py-1">
                   {detectedSlots.map((slot, idx) => {
@@ -831,7 +839,7 @@ function MagicPlanModalContent({
                   type="button"
                   onClick={handleApplyScan}
                   disabled={
-                    detectedSlots.filter((s) => s.selected).length === 0 || isApplying
+                    selectedScanSlots.length === 0 || isApplying
                   }
                   className="gap-2"
                 >
@@ -843,7 +851,7 @@ function MagicPlanModalContent({
                   ) : (
                     <>
                       <Check className="size-4" />
-                      <span>Appliquer à ma semaine</span>
+                      <span>Appliquer au planning</span>
                     </>
                   )}
                 </Button>

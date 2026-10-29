@@ -703,6 +703,10 @@ const DAY_NAMES_LIST = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "same
 const PREAMBLE_LINE_REGEX = /^(?:let'?s\s+look\b|here\s+is\b|here'?s\b|voici\b)/i
 
 export function normalizeDayLines(lines: string[]): string[] {
+  return normalizePlanningDayLines(lines, false)
+}
+
+function normalizePlanningDayLines(lines: string[], preserveDayMarkers: boolean): string[] {
   const result: string[] = []
   let currentDay = ""
   let currentSlot = ""
@@ -785,6 +789,7 @@ export function normalizeDayLines(lines: string[]): string[] {
       currentDay = daySlotOnlyMatch[1].toLowerCase()
       currentSlot = daySlotOnlyMatch[2].toLowerCase()
       mealsUnderCurrentDay = currentSlot === "midi" || currentSlot.includes("dej") ? 0 : 1
+      if (preserveDayMarkers) result.push(`${currentDay} ${currentSlot}`)
       continue
     }
 
@@ -796,6 +801,7 @@ export function normalizeDayLines(lines: string[]): string[] {
       currentDay = dayOnlyMatch[1].toLowerCase()
       currentSlot = ""
       mealsUnderCurrentDay = 0
+      if (preserveDayMarkers) result.push(currentDay)
       continue
     }
 
@@ -1285,49 +1291,43 @@ const DAY_NAME_TO_INDEX: Record<string, number> = {
 
 /**
  * Découpe un texte issu d'une photo ou d'un semainier texte pour l'assigner directement
- * aux créneaux midi/soir des sept jours à partir de la date choisie.
- * La première série de lignes d'un jour est retenue si ce jour réapparaît plus loin.
+ * aux créneaux midi/soir en suivant l'ordre chronologique des jours nommés.
+ * Le premier jour est ancré à sa prochaine occurrence à partir de la date choisie.
  */
 export function parsePlanningToWeekSlots(
   rawText: string,
   weekStartIso: string
 ): ParsedWeekSlot[] {
   const rawLines = rawText.split(/\r?\n/)
-  const lines = normalizeDayLines(rawLines)
+  const lines = normalizePlanningDayLines(rawLines, true)
   const results: ParsedWeekSlot[] = []
   const weekStart = parseISODate(weekStartIso)
   if (!weekStart) return []
   const startDayIndex = (weekStart.getDay() + 6) % 7
 
   const assignedPerDay: Record<number, { lunch?: boolean; dinner?: boolean }> = {}
-  const seenDays = new Set<string>()
-  let currentDay = ""
-  let repeatedDay = false
+  let currentDayIndex: number | null = null
+  let dayOffset = 0
 
   for (const line of lines) {
     const trimmed = line.trim()
     if (!trimmed || HEADER_LINE_REGEX.test(trimmed)) continue
 
-    const match = trimmed.match(DAY_PREFIX_LINE_REGEX)
+    const match = trimmed.match(DAY_PREFIX_LINE_REGEX) ?? trimmed.match(DAY_STANDALONE_REGEX)
     if (match) {
       const dayName = match[1]?.toLowerCase()
-      if (dayName && dayName !== currentDay) {
-        currentDay = dayName
-        repeatedDay = seenDays.has(dayName)
-        seenDays.add(dayName)
+      if (!dayName || !(dayName in DAY_NAME_TO_INDEX)) continue
+      const dayIndex = DAY_NAME_TO_INDEX[dayName]
+      if (currentDayIndex === null) {
+        dayOffset = (dayIndex - startDayIndex + 7) % 7
+      } else if (dayIndex !== currentDayIndex) {
+        dayOffset += (dayIndex - currentDayIndex + 7) % 7
       }
-      if (repeatedDay) continue
+      currentDayIndex = dayIndex
+
       const slotName = (match[2] || match[3])?.toLowerCase() ?? ""
-      const dishRaw = match[4] || match[2]
-      const dishName = cleanDishName(dishRaw)
+      const dishName = cleanDishName(match[4] ?? "")
       if (!dishName || dishName.length < 2) continue
-
-      let dayIndex: number | null = null
-      if (dayName && dayName in DAY_NAME_TO_INDEX) {
-        dayIndex = (DAY_NAME_TO_INDEX[dayName] - startDayIndex + 7) % 7
-      }
-
-      if (dayIndex === null) continue
 
       const isLunch = /midi|d[eé]jeuner|matin/i.test(slotName)
       const isDinner = /soir|d[iî]ner/i.test(slotName)
@@ -1339,7 +1339,7 @@ export function parsePlanningToWeekSlots(
         kind = "diner"
       } else {
         // Pas de créneau spécifié : affecter au déjeuner d'abord, puis au dîner
-        if (!assignedPerDay[dayIndex]?.lunch) {
+        if (!assignedPerDay[dayOffset]?.lunch) {
           kind = "dejeuner"
         } else {
           kind = "diner"
@@ -1347,16 +1347,16 @@ export function parsePlanningToWeekSlots(
       }
 
       if (
-        (kind === "dejeuner" && assignedPerDay[dayIndex]?.lunch) ||
-        (kind === "diner" && assignedPerDay[dayIndex]?.dinner)
+        (kind === "dejeuner" && assignedPerDay[dayOffset]?.lunch) ||
+        (kind === "diner" && assignedPerDay[dayOffset]?.dinner)
       ) {
         continue
       }
 
-      const dateStr = toISODate(addDays(weekStart, dayIndex))
-      if (!assignedPerDay[dayIndex]) assignedPerDay[dayIndex] = {}
-      if (kind === "dejeuner") assignedPerDay[dayIndex].lunch = true
-      else assignedPerDay[dayIndex].dinner = true
+      const dateStr = toISODate(addDays(weekStart, dayOffset))
+      if (!assignedPerDay[dayOffset]) assignedPerDay[dayOffset] = {}
+      if (kind === "dejeuner") assignedPerDay[dayOffset].lunch = true
+      else assignedPerDay[dayOffset].dinner = true
 
       results.push({
         date: dateStr,

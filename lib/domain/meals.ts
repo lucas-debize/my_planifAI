@@ -27,6 +27,14 @@ export type UpsertMealIngredientInput =
   | string
   | { name: string; quantity?: string | null }
 
+export type NewMealInput = {
+  name: string
+  ingredientNames: UpsertMealIngredientInput[]
+  origin?: MealOrigin
+}
+
+export type MealRef = { id: string; name: string }
+
 export type MealScope =
   | { type: "personal"; userId: string }
   | { type: "family"; familyId: string; userId: string; authorName?: string }
@@ -302,6 +310,142 @@ function normalizeIngredientInputs(
     })
   }
   return result
+}
+
+export async function createMeals(
+  supabase: Client,
+  scope: MealScope,
+  inputs: readonly NewMealInput[]
+): Promise<MealRef[]> {
+  const distinct = new Map<
+    string,
+    {
+      id: string
+      name: string
+      origin: MealOrigin
+      ingredients: { name: string; quantity: string | null }[]
+    }
+  >()
+  const ordered = inputs.map((input) => {
+    const name = displayName(input.name)
+    if (!name || name.length > 80) throw new Error("NAME_REQUIRED")
+    const origin = input.origin ?? "user"
+    const ingredients = normalizeIngredientInputs(input.ingredientNames)
+    const key = JSON.stringify([
+      normalizeName(name),
+      origin,
+      ingredients.map((item) => [normalizeName(item.name), item.quantity]),
+    ])
+    const existing = distinct.get(key)
+    if (existing) return existing
+    const meal = { id: crypto.randomUUID(), name, origin, ingredients }
+    distinct.set(key, meal)
+    return meal
+  })
+  if (ordered.length === 0) return []
+
+  const namesByNorm = new Map<string, string>()
+  for (const meal of distinct.values()) {
+    for (const item of meal.ingredients) {
+      const norm = normalizeName(item.name)
+      if (!namesByNorm.has(norm)) namesByNorm.set(norm, item.name)
+    }
+  }
+
+  const ingredientIds = new Map<string, string>()
+  const fetchIngredients = async (norms: string[]) => {
+    let query = supabase
+      .from("ingredients")
+      .select("id, name_normalized")
+      .in("name_normalized", norms)
+    if (scope.type === "family") {
+      query = query.eq("family_id", scope.familyId)
+    } else {
+      query = query.eq("user_id", scope.userId).is("family_id", null)
+    }
+    const { data, error } = await query
+    if (error) throw new Error(error.message)
+    for (const row of data ?? []) {
+      ingredientIds.set(row.name_normalized, row.id)
+    }
+  }
+
+  if (namesByNorm.size > 0) {
+    await fetchIngredients([...namesByNorm.keys()])
+    let missing = [...namesByNorm].filter(([norm]) => !ingredientIds.has(norm))
+    while (missing.length > 0) {
+      const { data, error } = await supabase
+        .from("ingredients")
+        .insert(missing.map(([norm, name]) => ({
+          user_id: scope.userId,
+          family_id: scope.type === "family" ? scope.familyId : null,
+          name,
+          name_normalized: norm,
+        })))
+        .select("id, name_normalized")
+      if (error) {
+        if (error.code !== "23505" && !error.message.toLowerCase().includes("unique")) {
+          throw new Error(error.message)
+        }
+        const previousSize = ingredientIds.size
+        await fetchIngredients(missing.map(([norm]) => norm))
+        if (ingredientIds.size <= previousSize) throw new Error(error.message)
+      } else {
+        for (const row of data ?? []) {
+          ingredientIds.set(row.name_normalized, row.id)
+        }
+        if (missing.some(([norm]) => !ingredientIds.has(norm))) {
+          throw new Error("INGREDIENT_NOT_FOUND")
+        }
+      }
+      missing = missing.filter(([norm]) => !ingredientIds.has(norm))
+    }
+  }
+
+  const { error: mealError } = await supabase.from("meals").insert(
+    [...distinct.values()].map((meal) => ({
+      id: meal.id,
+      user_id: scope.userId,
+      family_id: scope.type === "family" ? scope.familyId : null,
+      created_by_user_id: scope.type === "family" ? scope.userId : null,
+      name: meal.name,
+      origin: meal.origin,
+    }))
+  )
+  if (mealError) throw new Error(mealError.message)
+
+  const links = [...distinct.values()].flatMap((meal) =>
+    meal.ingredients.map((item, position) => {
+      const ingredientId = ingredientIds.get(normalizeName(item.name))
+      if (!ingredientId) throw new Error("INGREDIENT_NOT_FOUND")
+      return {
+        meal_id: meal.id,
+        ingredient_id: ingredientId,
+        position,
+        quantity: item.quantity,
+      }
+    })
+  )
+  if (links.length > 0) {
+    let { error } = await supabase.from("meal_ingredients").insert(links)
+    if (
+      error &&
+      (error.code === "42703" || error.code === "PGRST204") &&
+      /quantity/i.test(error.message)
+    ) {
+      const result = await supabase.from("meal_ingredients").insert(
+        links.map(({ meal_id, ingredient_id, position }) => ({
+          meal_id,
+          ingredient_id,
+          position,
+        }))
+      )
+      error = result.error
+    }
+    if (error) throw new Error(error.message)
+  }
+
+  return ordered.map(({ id, name }) => ({ id, name }))
 }
 
 async function replaceMealIngredients(

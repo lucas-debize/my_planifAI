@@ -123,9 +123,14 @@ Le navigateur optimise la photo en JPEG, puis l'envoie à `/api/ai/scan-image`. 
 Il accepte uniquement une réponse finale complète et ignore les blocs de réflexion. Le traitement des fournisseurs est borné à 45 secondes.
 Le client ne relance pas l'analyse par une server action ou un OCR après un échec.
 
-La transcription est ensuite affectée aux dates à partir du début de semaine choisi. Un second samedi en fin de photo ne remplace pas le premier.
+La transcription est affectée aux dates à partir du début de semaine choisi, en conservant l'ordre chronologique même au-delà de sept jours.
+Un second samedi en fin de photo est placé dans la semaine suivante, sans remplacer ni fusionner le premier.
 Les cases vides restent vides. Vérifie les propositions avant de les appliquer, notamment les lignes barrées et les accompagnements.
 Les ingrédients proposés pour un nouveau plat viennent des recettes par défaut de l'application, pas de la photo.
+
+Le bouton « Appliquer au planning » crée les nouveaux plats et ingrédients par lots, sans modifier les recettes existantes du carnet.
+Les créneaux sélectionnés sont ensuite enregistrés en une seule écriture, sans suppression préalable : un échec de cette écriture conserve l'ancien planning.
+Les créations dans le carnet et l'écriture du planning ne forment pas une transaction unique ; les nouveaux plats peuvent donc rester dans le carnet si l'enregistrement du planning échoue.
 
 La reconnaissance manuscrite utilise une API distante. Elle n'est ni entièrement locale ni garantie exacte.
 Sans configuration Cloudflare ni clé Vision, l'import photo affiche une erreur explicite. L'onglet texte reste utilisable sans API.
@@ -142,11 +147,11 @@ Le mode `--cloudflare` interroge d'abord `/api/health` et exige un statut 200 av
 Sinon le script échoue avant tout scan, sans consommer de quota IA. Sans `--cloudflare`, il garde le comportement précédent pour une installation Gemini.
 Le script affiche le modèle Cloudflare configuré, les délais, les erreurs HTTP et les créneaux datés. Le script appelle réellement l'API et consomme le quota disponible.
 Il conserve chaque réponse dans `.data/scan-verification/`, sous un fichier stable nommé d'après la photo (`photo1.png-response.json`), exclu de Git.
-Son contrôle de complétude attend sept jours et au moins treize créneaux. Compare aussi les noms et les créneaux à la photo : un statut `PASS` ne mesure pas la fidélité de la transcription, et le nombre de créneaux ne prouve pas les noms.
+Son contrôle de complétude attend au moins sept jours, treize créneaux et des dates chronologiques, sans limiter l'import à une seule semaine. Compare aussi les noms et les créneaux à la photo : un statut `PASS` ne mesure pas la fidélité de la transcription, et le nombre de créneaux ne prouve pas les noms.
 Les trois photos d'essai sont un échantillon réel ; aucune lecture n'est garantie.
 
-Vérification réelle du 29 octobre 2026 avec Gemma 4 sur Cloudflare : les trois photos manuscrites ont renvoyé respectivement 14, 14 et 13 créneaux sur sept jours.
-Le parcours photo, l'aperçu défilant et la confirmation ont été exercés dans Chrome à 390 px ; les écritures de confirmation sont restées dans le stockage de développement local et ont survécu au rechargement.
+Les transcriptions Cloudflare obtenues le 29 octobre 2026 ont été relues avec le parseur chronologique corrigé : les trois photos manuscrites donnent respectivement 15, 16 et 14 créneaux, second samedi compris.
+La confirmation a été exercée dans Chrome à 390 px avec 28 créneaux sur deux semaines futures débutant le samedi : les deux semaines persistent après navigation et rechargement dans le stockage de développement local. Aucune écriture de production n'a été effectuée pour ce test.
 Les noms manuscrits ambigus restent à relire avant confirmation.
 
 ## Développement local

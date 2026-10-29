@@ -534,18 +534,73 @@ Lundi - Reste
       ])
     })
 
-    it("garde le premier samedi sans le compléter avec celui de la semaine suivante", () => {
-      const text = `Samedi (1) : Salade (midi), (non renseigné) (soir)
+    it("place le lundi après le week-end dans la semaine suivante", () => {
+      const text = `Samedi midi : Salade
+Samedi soir : Pizza
 Dimanche midi : Poisson
-Lundi soir : Pâtes
+Lundi midi : Reste
+Lundi soir : Tartiflette
+Vendredi soir : Tacos`
+
+      expect(parsePlanningToWeekSlots(text, "2026-10-26")).toEqual([
+        { date: "2026-10-31", kind: "dejeuner", mealName: "Salade" },
+        { date: "2026-10-31", kind: "diner", mealName: "Pizza" },
+        { date: "2026-11-01", kind: "dejeuner", mealName: "Poisson" },
+        { date: "2026-11-02", kind: "dejeuner", mealName: "Reste" },
+        { date: "2026-11-02", kind: "diner", mealName: "Tartiflette" },
+        { date: "2026-11-06", kind: "diner", mealName: "Tacos" },
+      ])
+    })
+
+    it("conserve le second samedi à sa propre date sans remplir une case vide du premier", () => {
+      const text = `Samedi midi : Salade
+Samedi soir : non renseigné
+Dimanche midi : Poisson
 Vendredi soir : Tacos
-Samedi (2) : Pizza (midi), Panini (soir)`
+Samedi midi : Pizza
+Samedi soir : Panini`
 
       expect(parsePlanningToWeekSlots(text, "2026-10-31")).toEqual([
         { date: "2026-10-31", kind: "dejeuner", mealName: "Salade" },
         { date: "2026-11-01", kind: "dejeuner", mealName: "Poisson" },
-        { date: "2026-11-02", kind: "diner", mealName: "Pâtes" },
         { date: "2026-11-06", kind: "diner", mealName: "Tacos" },
+        { date: "2026-11-07", kind: "dejeuner", mealName: "Pizza" },
+        { date: "2026-11-07", kind: "diner", mealName: "Panini" },
+      ])
+    })
+
+    it("conserve plusieurs semaines lors du passage à une nouvelle année", () => {
+      const text = `Jeudi midi : Salade
+Vendredi soir : Soupe
+Jeudi midi : Pizza
+Vendredi soir : Quiche
+Jeudi midi : Curry
+Vendredi soir : Gratin
+Lundi midi : Pâtes`
+
+      expect(parsePlanningToWeekSlots(text, "2026-12-28")).toEqual([
+        { date: "2026-12-31", kind: "dejeuner", mealName: "Salade" },
+        { date: "2027-01-01", kind: "diner", mealName: "Soupe" },
+        { date: "2027-01-07", kind: "dejeuner", mealName: "Pizza" },
+        { date: "2027-01-08", kind: "diner", mealName: "Quiche" },
+        { date: "2027-01-14", kind: "dejeuner", mealName: "Curry" },
+        { date: "2027-01-15", kind: "diner", mealName: "Gratin" },
+        { date: "2027-01-18", kind: "dejeuner", mealName: "Pâtes" },
+      ])
+    })
+
+    it("fait avancer les jours vides et non renseignés sans créer de repas", () => {
+      const text = `Dimanche midi :
+Samedi midi : Salade
+Dimanche
+Samedi soir : Pizza
+Dimanche soir : *(non renseigné)*
+Samedi midi : Quiche`
+
+      expect(parsePlanningToWeekSlots(text, mondayIso)).toEqual([
+        { date: "2026-11-07", kind: "dejeuner", mealName: "Salade" },
+        { date: "2026-11-14", kind: "diner", mealName: "Pizza" },
+        { date: "2026-11-21", kind: "dejeuner", mealName: "Quiche" },
       ])
     })
 
@@ -627,14 +682,14 @@ Vendredi - Gnocci lardons .
       const slots = parsePlanningToWeekSlots(text, mondayIso)
       expect(slots.length).toBe(14)
       // Lundi
-      const lundiMidi = slots.find((s) => s.date === "2026-10-26" && s.kind === "dejeuner")
-      const lundiSoir = slots.find((s) => s.date === "2026-10-26" && s.kind === "diner")
+      const lundiMidi = slots.find((s) => s.date === "2026-11-02" && s.kind === "dejeuner")
+      const lundiSoir = slots.find((s) => s.date === "2026-11-02" && s.kind === "diner")
       expect(lundiMidi?.mealName).toBe("Reste")
       expect(lundiSoir?.mealName).toBe("Corne de boeuf / Tartiflette")
 
       // Mardi (avec typo 'Rete' corrigée en 'Reste')
-      const mardiMidi = slots.find((s) => s.date === "2026-10-27" && s.kind === "dejeuner")
-      const mardiSoir = slots.find((s) => s.date === "2026-10-27" && s.kind === "diner")
+      const mardiMidi = slots.find((s) => s.date === "2026-11-03" && s.kind === "dejeuner")
+      const mardiSoir = slots.find((s) => s.date === "2026-11-03" && s.kind === "diner")
       expect(mardiMidi?.mealName).toBe("Reste")
       expect(mardiSoir?.mealName).toBe("Steak / frite")
 
@@ -670,13 +725,13 @@ Vendredi
 
       const slots = parsePlanningToWeekSlots(text, "2026-10-26")
       expect(slots.length).toBe(14)
-      const lundiMidi = slots.find((s) => s.date === "2026-10-26" && s.kind === "dejeuner")
-      const lundiSoir = slots.find((s) => s.date === "2026-10-26" && s.kind === "diner")
+      const lundiMidi = slots.find((s) => s.date === "2026-11-02" && s.kind === "dejeuner")
+      const lundiSoir = slots.find((s) => s.date === "2026-11-02" && s.kind === "diner")
       expect(lundiMidi?.mealName).toBe("Restes")
       expect(lundiSoir?.mealName).toBe("Brocoli / saucisse fumée")
 
-      const venMidi = slots.find((s) => s.date === "2026-10-30" && s.kind === "dejeuner")
-      const venSoir = slots.find((s) => s.date === "2026-10-30" && s.kind === "diner")
+      const venMidi = slots.find((s) => s.date === "2026-11-06" && s.kind === "dejeuner")
+      const venSoir = slots.find((s) => s.date === "2026-11-06" && s.kind === "diner")
       expect(venMidi?.mealName).toBe("Tacos")
       expect(venSoir?.mealName).toBe("Pommes noisettes steak")
     })
@@ -700,9 +755,9 @@ Vendredi
       const slots = parsePlanningToWeekSlots(text, mondayIso)
       expect(slots.length).toBe(13)
       // Ignore *(non renseigné)* pour Vendredi soir
-      const vendSoir = slots.find((s) => s.date === "2026-10-30" && s.kind === "diner")
+      const vendSoir = slots.find((s) => s.date === "2026-11-06" && s.kind === "diner")
       expect(vendSoir).toBeUndefined()
-      const vendMidi = slots.find((s) => s.date === "2026-10-30" && s.kind === "dejeuner")
+      const vendMidi = slots.find((s) => s.date === "2026-11-06" && s.kind === "dejeuner")
       expect(vendMidi?.mealName).toBe("Sandwich au thon")
     })
 

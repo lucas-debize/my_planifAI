@@ -145,33 +145,55 @@ export async function setMultipleSlots(
   assignments: { date: string; kind: SlotKind; mealId: string }[]
 ): Promise<void> {
   if (assignments.length === 0) return
-  const isFamily = scope.type === "family"
-
+  const selected = new Map<string, (typeof assignments)[number]>()
   for (const item of assignments) {
     if (!parseISODate(item.date)) throw new Error("INVALID_DATE")
+    if (!SLOTS.includes(item.kind)) throw new Error("INVALID_SLOT_KIND")
+    selected.set(`${item.date}:${item.kind}`, item)
+  }
 
-    let deleteExisting = supabase
-      .from("plan_slots")
-      .delete()
-      .eq("slot_date", item.date)
-      .eq("slot_kind", item.kind)
+  const mealIds = [...new Set([...selected.values()].map((item) => item.mealId))]
+  let mealQuery = supabase.from("meals").select("id").in("id", mealIds)
+  if (scope.type === "family") {
+    mealQuery = mealQuery.eq("family_id", scope.familyId)
+  } else {
+    mealQuery = mealQuery.eq("user_id", scope.userId).is("family_id", null)
+  }
+  const { data: meals, error: mealError } = await mealQuery
+  if (mealError) throw new Error(mealError.message)
+  const foundIds = new Set((meals ?? []).map((meal) => meal.id))
+  if (mealIds.some((id) => !foundIds.has(id))) throw new Error("MEAL_NOT_FOUND")
 
-    if (isFamily) {
-      deleteExisting = deleteExisting.eq("family_id", scope.familyId)
-    } else {
-      deleteExisting = deleteExisting.eq("user_id", scope.userId).is("family_id", null)
-    }
-    await deleteExisting
-
-    const { error: insertError } = await supabase.from("plan_slots").insert({
-      family_id: isFamily ? scope.familyId : null,
-      user_id: scope.userId,
+  const dates = [...new Set([...selected.values()].map((item) => item.date))]
+  let slotQuery = supabase
+    .from("plan_slots")
+    .select("id, user_id, slot_date, slot_kind")
+    .in("slot_date", dates)
+  if (scope.type === "family") {
+    slotQuery = slotQuery.eq("family_id", scope.familyId)
+  } else {
+    slotQuery = slotQuery.eq("user_id", scope.userId).is("family_id", null)
+  }
+  const { data: slots, error: slotError } = await slotQuery
+  if (slotError) throw new Error(slotError.message)
+  const existingByKey = new Map(
+    (slots ?? []).map((slot) => [`${slot.slot_date}:${slot.slot_kind}`, slot])
+  )
+  const rows = [...selected.entries()].map(([key, item]) => {
+    const existing = existingByKey.get(key)
+    return {
+      id: existing?.id ?? crypto.randomUUID(),
+      user_id: existing?.user_id ?? scope.userId,
+      family_id: scope.type === "family" ? scope.familyId : null,
       slot_date: item.date,
       slot_kind: item.kind,
       meal_id: item.mealId,
-    })
-    if (insertError) throw new Error(insertError.message)
-  }
+    }
+  })
+  const { error } = await supabase
+    .from("plan_slots")
+    .upsert(rows, { onConflict: "id" })
+  if (error) throw new Error(error.message)
 }
 
 export async function copyWeek(

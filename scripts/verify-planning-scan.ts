@@ -59,13 +59,15 @@ for (const image of images) {
     const slots = parsePlanningToWeekSlots(data.transcribedText, "2026-10-31")
     const ideas = extractMealsFromText(data.transcribedText, "image", "list")
     const days = new Set(slots.map((slot) => slot.date))
-    const valid = days.size === 7 && slots.length >= 13 && !/let.s look|here is/i.test(data.transcribedText)
+    const chronological = slots.every((slot, index) => index === 0 || slot.date >= slots[index - 1].date)
+    const valid = days.size >= 7 && slots.length >= 13 && chronological && !/let.s look|here is/i.test(data.transcribedText)
     if (!valid) failures++
     console.log(JSON.stringify({
       image: basename(image), status: valid ? "PASS" : "FAIL", http: response.status,
       ...(cloudflareMode ? { provider: cloudflareModel } : {}),
       seconds: Number(((performance.now() - started) / 1000).toFixed(1)),
       days: days.size, slots: slots.length, ideas: ideas.meals.length,
+      from: slots[0]?.date, to: slots.at(-1)?.date,
       meals: slots.map((slot) => ({ date: slot.date, kind: slot.kind, name: slot.mealName })),
     }))
   } catch (error) {

@@ -4,8 +4,10 @@ import {
   setMultipleSlots as setMultipleSlotsDomain,
   type SlotScope,
 } from "@/lib/domain/slots"
-import { upsertMeal as upsertMealDomain, type MealScope } from "@/lib/domain/meals"
-import type { SlotKind } from "@/lib/week"
+import { createMeals, type MealScope } from "@/lib/domain/meals"
+import { parseISODate } from "@/lib/dates"
+import { displayName } from "@/lib/ingredients"
+import { SLOTS, type SlotKind } from "@/lib/week"
 import { requireScopedContext, revalidateApp } from "@/lib/actions/session"
 
 export type AutoPlanAssignment = {
@@ -39,6 +41,19 @@ export async function applyAutoPlanAction(
     return { count: 0, slots: [] }
   }
 
+  const selectedByKey = new Map<string, AutoPlanAssignment>()
+  for (const item of assignments) {
+    if (!parseISODate(item.date)) throw new Error("INVALID_DATE")
+    if (!SLOTS.includes(item.kind)) throw new Error("INVALID_SLOT_KIND")
+    selectedByKey.set(`${item.date}:${item.kind}`, item)
+  }
+  const selected = [...selectedByKey.values()]
+  const fresh = selected.filter((item) => !item.meal.id)
+  for (const item of fresh) {
+    const name = displayName(item.meal.name)
+    if (!name || name.length > 80) throw new Error("NAME_REQUIRED")
+  }
+
   const { supabase, authUid, scope } = await requireScopedContext()
   const isFamily = scope.type === "family" && Boolean(scope.familyId)
 
@@ -50,53 +65,44 @@ export async function applyAutoPlanAction(
     ? { type: "family", familyId: scope.familyId!, userId: authUid }
     : { type: "personal", userId: authUid }
 
-  const resolvedAssignments: {
-    date: string
-    kind: SlotKind
-    mealId: string
-    mealName: string
-  }[] = []
+  const created = await createMeals(
+    supabase,
+    mealScope,
+    fresh.map((item) => ({
+      name: item.meal.name,
+      ingredientNames: item.meal.ingredients,
+      origin: "ai",
+    }))
+  )
+  const resolved: AutoPlanResult["slots"] = []
+  let createdIndex = 0
 
-  for (const item of assignments) {
-    let mealId = item.meal.id
-
-    // Si c'est une suggestion IA sans ID, créer le plat et ses ingrédients dans l'espace actif
-    if (!mealId) {
-      const created = await upsertMealDomain(supabase, mealScope, {
-        name: item.meal.name,
-        ingredientNames: item.meal.ingredients,
-        origin: "ai",
-      })
-      mealId = created.id
-    }
-
-    resolvedAssignments.push({
+  for (const item of selected) {
+    const meal = item.meal.id
+      ? { id: item.meal.id, name: item.meal.name }
+      : created[createdIndex++]
+    if (!meal) throw new Error("SAVE_FAILED")
+    resolved.push({
       date: item.date,
       kind: item.kind,
-      mealId,
-      mealName: item.meal.name,
+      meal: { id: meal.id, name: meal.name },
     })
   }
 
-  // Enregistrement des créneaux en base
   await setMultipleSlotsDomain(
     supabase,
     slotScope,
-    resolvedAssignments.map((a) => ({
-      date: a.date,
-      kind: a.kind,
-      mealId: a.mealId,
+    resolved.map((item) => ({
+      date: item.date,
+      kind: item.kind,
+      mealId: item.meal.id,
     }))
   )
 
   await revalidateApp()
 
   return {
-    count: resolvedAssignments.length,
-    slots: resolvedAssignments.map((a) => ({
-      date: a.date,
-      kind: a.kind,
-      meal: { id: a.mealId, name: a.mealName },
-    })),
+    count: resolved.length,
+    slots: resolved,
   }
 }
