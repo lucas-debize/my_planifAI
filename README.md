@@ -101,8 +101,21 @@ Cet endpoint peut aussi être interrogé par un service gratuit tiers (ex: [cron
 
 ## Configurer l'import photo de planning
 
-Ajoute `GEMINI_API_KEY` dans les variables serveur Vercel, puis redéploie l'application. Ne préfixe pas cette clé par `NEXT_PUBLIC_`.
-Le scanner essaie `gemini-3.5-flash` avec le niveau de réflexion `MINIMAL`, puis `gemini-3.8-flash` avec `LOW` si nécessaire.
+Le scanner lit des variables serveur Vercel, sans préfixe `NEXT_PUBLIC_`, puis l'application doit être redéployée. Deux configurations sont possibles :
+
+- `CLOUDFLARE_ACCOUNT_ID` et `CLOUDFLARE_API_TOKEN` pour Cloudflare Workers AI, à définir ensemble.
+- `GEMINI_API_KEY` pour Google AI Studio, sur les installations sans Cloudflare.
+
+La configuration Cloudflare est prioritaire et exclusive. Dès qu'une variable Cloudflare est présente, le scanner n'appelle ni Gemini, ni GLM, ni OpenAI, même en cas d'échec.
+Si une seule des deux variables Cloudflare est définie, le scan renvoie une erreur explicite au lieu de basculer sur une API payante.
+`/api/health` expose `aiVision.cloudflareConfigured`, true seulement quand les deux variables Cloudflare sont non vides, ainsi que `aiVision.cloudflareModel` ; il n'expose jamais le jeton ni l'identifiant de compte.
+La présence des variables ne prouve pas que le jeton est valide, seule une vraie requête le vérifie.
+
+Pour éviter toute facturation, le compte Cloudflare doit rester sur l'offre Workers Free. L'application ne modifie pas cette offre.
+Cette offre alloue 10 000 neurones par jour : une enveloppe de calcul, pas un nombre de requêtes garanti.
+Une fois l'enveloppe épuisée, chaque scan échoue jusqu'à la réinitialisation quotidienne.
+
+Sur une installation sans Cloudflare, le scanner essaie `gemini-3.5-flash` avec le niveau de réflexion `MINIMAL`, puis `gemini-3.8-flash` avec `LOW` si nécessaire.
 Ce repli couvre les refus de modèle, quotas atteints, saturations et délais dépassés. Il reste soumis au délai global de 45 secondes.
 La présence d'une clé ne garantit ni quota disponible ni disponibilité du service Google. Chaque tentative de modèle peut consommer son quota.
 
@@ -115,19 +128,22 @@ Les cases vides restent vides. Vérifie les propositions avant de les appliquer,
 Les ingrédients proposés pour un nouveau plat viennent des recettes par défaut de l'application, pas de la photo.
 
 La reconnaissance manuscrite utilise une API distante. Elle n'est ni entièrement locale ni garantie exacte.
-Sans clé Vision, l'import photo affiche une erreur explicite. L'onglet texte reste utilisable sans API.
-Les conditions de gratuité et les limites dépendent du [projet Google AI Studio](https://aistudio.google.com/).
-Lors des essais du 29 octobre 2026, Google a indiqué une limite de 20 requêtes gratuites par jour pour `gemini-3.8-flash` sur le projet utilisé.
-Consulte les limites de ton propre projet. Le script de vérification appelle réellement l'API et consomme le quota disponible.
+Sans configuration Cloudflare ni clé Vision, l'import photo affiche une erreur explicite. L'onglet texte reste utilisable sans API.
+Pour l'installation Gemini, les conditions de gratuité et les limites dépendent du [projet Google AI Studio](https://aistudio.google.com/).
+Lors des essais du 29 octobre 2026, Google a indiqué une limite de 20 requêtes gratuites par jour pour `gemini-3.8-flash` sur le projet utilisé. Consulte les limites de ton propre projet.
 
 Pour vérifier les vraies photos sur une instance, sans simuler l'IA :
 
 ```bash
-bun scripts/verify-planning-scan.ts https://myplanifai.vercel.app photo1.png photo2.png photo3.png
+bun scripts/verify-planning-scan.ts --cloudflare https://myplanifai.vercel.app photo1.png photo2.png photo3.png
 ```
 
-Le script affiche les délais, les erreurs HTTP et les créneaux datés. Il conserve les réponses dans `.data/scan-verification/`, exclu de Git.
-Son contrôle de complétude attend sept jours et au moins treize créneaux. Compare aussi les noms et les créneaux à la photo : un statut `PASS` ne mesure pas la fidélité de la transcription.
+Le mode `--cloudflare` interroge d'abord `/api/health` et exige un statut 200 avec `aiVision.cloudflareConfigured` à true.
+Sinon le script échoue avant tout scan, sans consommer de quota IA. Sans `--cloudflare`, il garde le comportement précédent pour une installation Gemini.
+Le script affiche le modèle Cloudflare configuré, les délais, les erreurs HTTP et les créneaux datés. Le script appelle réellement l'API et consomme le quota disponible.
+Il conserve chaque réponse dans `.data/scan-verification/`, sous un fichier stable nommé d'après la photo (`photo1.png-response.json`), exclu de Git.
+Son contrôle de complétude attend sept jours et au moins treize créneaux. Compare aussi les noms et les créneaux à la photo : un statut `PASS` ne mesure pas la fidélité de la transcription, et le nombre de créneaux ne prouve pas les noms.
+Les trois photos d'essai sont un échantillon réel ; aucune lecture n'est garantie.
 
 ## Développement local
 

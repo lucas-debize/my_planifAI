@@ -6,6 +6,7 @@ import {
   type ExtractedRecipe,
   type ExtractedMealBatch,
 } from "@/lib/ai/recipe-extractor"
+import { transcribeCloudflareImage } from "@/lib/ai/cloudflare-vision"
 
 export type ExtractedImageResult = {
   transcribedText: string
@@ -62,6 +63,22 @@ export async function transcribeImageBuffer(
   mimeType: string,
   customApiKey?: string
 ): Promise<string> {
+  if (process.env.CLOUDFLARE_API_TOKEN !== undefined || process.env.CLOUDFLARE_ACCOUNT_ID !== undefined) {
+    const apiToken = process.env.CLOUDFLARE_API_TOKEN?.trim()
+    const accountId = process.env.CLOUDFLARE_ACCOUNT_ID?.trim()
+    if (!apiToken || !accountId) {
+      throw new Error("Configuration Cloudflare incomplète : renseignez CLOUDFLARE_API_TOKEN et CLOUDFLARE_ACCOUNT_ID.")
+    }
+    return transcribeCloudflareImage({
+      buffer,
+      mimeType,
+      prompt: VISION_PROMPT,
+      accountId,
+      apiToken,
+      signal: AbortSignal.timeout(45000),
+    })
+  }
+
   const geminiKey =
     process.env.GEMINI_API_KEY ||
     (customApiKey?.startsWith("AIza") ? customApiKey : undefined)

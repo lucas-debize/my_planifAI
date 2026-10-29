@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { CLOUDFLARE_VISION_MODEL } from "@/lib/ai/cloudflare-vision"
 import { getSupabasePublicConfig } from "@/lib/supabase/env"
 
 export const dynamic = "force-dynamic"
@@ -53,6 +54,10 @@ export async function GET() {
       geminiModels,
       glmConfigured: Boolean(process.env.GLM_API_KEY || process.env.ZHIPU_API_KEY),
       openaiConfigured: Boolean(process.env.OPENAI_API_KEY),
+      cloudflareConfigured: Boolean(
+        process.env.CLOUDFLARE_ACCOUNT_ID?.trim() && process.env.CLOUDFLARE_API_TOKEN?.trim()
+      ),
+      cloudflareModel: CLOUDFLARE_VISION_MODEL,
     },
   })
 }

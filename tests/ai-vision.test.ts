@@ -13,6 +13,8 @@ describe("Extraction d'images de planning repas (AI Vision)", () => {
     delete process.env.GLM_API_KEY
     delete process.env.ZHIPU_API_KEY
     delete process.env.ZAI_API_KEY
+    delete process.env.CLOUDFLARE_API_TOKEN
+    delete process.env.CLOUDFLARE_ACCOUNT_ID
   })
 
   afterEach(() => {
@@ -342,5 +344,42 @@ Lundi soir : Omelette aux champignons`
     formData.append("image", new File(["image"], "planning.png", { type: "image/png" }))
     await expect(extractRecipeFromImageAction(formData)).rejects.toThrow("Google refuse la clé Gemini")
     expect(attempts).toBe(1)
+  })
+
+  it("n'utilise pas Gemini si la configuration Cloudflare est incomplète", async () => {
+    process.env.CLOUDFLARE_ACCOUNT_ID = "a".repeat(32)
+    process.env.GEMINI_API_KEY = "test-gemini-key"
+    let attempts = 0
+    globalThis.fetch = async () => {
+      attempts++
+      throw new Error("Aucun fournisseur ne devrait être contacté")
+    }
+    const formData = new FormData()
+    formData.append("image", new File(["image"], "planning.png", { type: "image/png" }))
+    await expect(extractRecipeFromImageAction(formData)).rejects.toThrow("Configuration Cloudflare incomplète")
+    expect(attempts).toBe(0)
+  })
+
+  it("ne bascule pas vers Gemini quand le quota Cloudflare est atteint", async () => {
+    process.env.CLOUDFLARE_ACCOUNT_ID = "a".repeat(32)
+    process.env.CLOUDFLARE_API_TOKEN = "test-cloudflare-token"
+    process.env.GEMINI_API_KEY = "test-gemini-key"
+    let cloudflareAttempts = 0
+    let geminiAttempts = 0
+    globalThis.fetch = async (url: string | URL | Request) => {
+      if (url.toString().includes("api.cloudflare.com")) {
+        cloudflareAttempts++
+        return Response.json({ success: false, errors: [{ code: 3040, message: "Quota" }] }, { status: 429 })
+      }
+      geminiAttempts++
+      return Response.json({
+        candidates: [{ finishReason: "STOP", content: { parts: [{ text: "Lundi soir : Pizza" }] } }],
+      })
+    }
+    const formData = new FormData()
+    formData.append("image", new File(["image"], "planning.png", { type: "image/png" }))
+    await expect(extractRecipeFromImageAction(formData)).rejects.toThrow(/quota/i)
+    expect(cloudflareAttempts).toBe(1)
+    expect(geminiAttempts).toBe(0)
   })
 })

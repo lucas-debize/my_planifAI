@@ -2,14 +2,41 @@ import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { basename, resolve } from "node:path"
 import { extractMealsFromText, parsePlanningToWeekSlots } from "../lib/ai/recipe-extractor"
 
-const [baseUrl, ...images] = process.argv.slice(2)
+const args = process.argv.slice(2)
+const cloudflareMode = args.includes("--cloudflare")
+const [baseUrl, ...images] = args.filter((arg) => arg !== "--cloudflare")
 if (!baseUrl || images.length === 0) {
-  throw new Error("Usage: bun scripts/verify-planning-scan.ts <base-url> <image> [image...]")
+  throw new Error("Usage: bun scripts/verify-planning-scan.ts [--cloudflare] <base-url> <image> [image...]")
 }
 const directory = resolve(".data/scan-verification")
 await mkdir(directory, { recursive: true })
 let failures = 0
-for (const [index, image] of images.entries()) {
+let cloudflareModel = "cloudflare"
+if (cloudflareMode) {
+  try {
+    const response = await fetch(new URL("/api/health", baseUrl), { signal: AbortSignal.timeout(10000) })
+    const body = await response.text()
+    if (!response.ok) throw new Error(`HTTP ${response.status}: ${body.slice(0, 250)}`)
+    const data: unknown = JSON.parse(body)
+    if (typeof data !== "object" || data === null || !("aiVision" in data) ||
+        typeof data.aiVision !== "object" || data.aiVision === null ||
+        !("cloudflareConfigured" in data.aiVision) || data.aiVision.cloudflareConfigured !== true) {
+      throw new Error("aiVision.cloudflareConfigured n'est pas true")
+    }
+    if ("cloudflareModel" in data.aiVision &&
+        typeof data.aiVision.cloudflareModel === "string" && data.aiVision.cloudflareModel) {
+      cloudflareModel = data.aiVision.cloudflareModel
+    }
+    console.log(JSON.stringify({ check: "health", status: "PASS", provider: cloudflareModel }))
+    console.warn("Mode Cloudflare : un statut PASS contrôle la complétude, pas l'exactitude des noms transcrits.")
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.log(JSON.stringify({ check: "health", status: "FAIL", error: message }))
+    console.warn("Cloudflare non configuré sur /api/health : aucun scan lancé, aucun quota IA consommé.")
+    process.exit(1)
+  }
+}
+for (const image of images) {
   const bytes = await readFile(image)
   const type = image.endsWith(".png") ? "image/png" : image.endsWith(".webp") ? "image/webp" : "image/jpeg"
   const formData = new FormData()
@@ -23,7 +50,7 @@ for (const [index, image] of images.entries()) {
       signal: AbortSignal.timeout(55000),
     })
     const body = await response.text()
-    await writeFile(resolve(directory, `${index + 1}-response.json`), body)
+    await writeFile(resolve(directory, `${basename(image)}-response.json`), body)
     if (!response.ok) throw new Error(`HTTP ${response.status}: ${body.slice(0, 250)}`)
     const data: unknown = JSON.parse(body)
     if (typeof data !== "object" || data === null || !("transcribedText" in data) || typeof data.transcribedText !== "string") {
@@ -36,6 +63,7 @@ for (const [index, image] of images.entries()) {
     if (!valid) failures++
     console.log(JSON.stringify({
       image: basename(image), status: valid ? "PASS" : "FAIL", http: response.status,
+      ...(cloudflareMode ? { provider: cloudflareModel } : {}),
       seconds: Number(((performance.now() - started) / 1000).toFixed(1)),
       days: days.size, slots: slots.length, ideas: ideas.meals.length,
       meals: slots.map((slot) => ({ date: slot.date, kind: slot.kind, name: slot.mealName })),
@@ -43,7 +71,7 @@ for (const [index, image] of images.entries()) {
   } catch (error) {
     failures++
     const message = error instanceof Error ? error.message : String(error)
-    console.log(JSON.stringify({ image: basename(image), status: "FAIL", seconds: Number(((performance.now() - started) / 1000).toFixed(1)), error: message }))
+    console.log(JSON.stringify({ image: basename(image), status: "FAIL", ...(cloudflareMode ? { provider: cloudflareModel } : {}), seconds: Number(((performance.now() - started) / 1000).toFixed(1)), error: message }))
     if (/Quota IA|RESOURCE_EXHAUSTED|quota.*exceeded|exceeded.*quota/i.test(message)) {
       console.warn("Quota atteint : arrêt des scans suivants pour éviter de nouveaux appels inutiles.")
       break
