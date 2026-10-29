@@ -63,74 +63,48 @@ export async function transcribeImageBuffer(
   }
   let lastProviderError = ""
 
-  // 1. Mode Gemini Vision si configuré (ultra-rapide : ~1.5s)
+  // 1. Mode Gemini Vision si configuré
   if (geminiKey) {
     try {
-      const models = [
-        "gemini-2.5-flash-image",
-        "gemini-flash-lite-latest",
-        "gemini-3.5-flash-lite",
-        "gemini-flash-latest",
-      ]
-      const geminiUrls = models.map(
-        (m) =>
-          `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${geminiKey}`
-      )
-      for (const url of geminiUrls) {
-        try {
-          const geminiPayload = JSON.stringify({
-            contents: [
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${geminiKey}`
+      const geminiPayload = JSON.stringify({
+        contents: [
+          {
+            parts: [
               {
-                parts: [
-                  {
-                    inlineData: {
-                      mimeType,
-                      data: buffer.toString("base64"),
-                    },
-                  },
-                  {
-                    text: VISION_PROMPT,
-                  },
-                ],
+                inlineData: {
+                  mimeType,
+                  data: buffer.toString("base64"),
+                },
+              },
+              {
+                text: VISION_PROMPT,
               },
             ],
-            generationConfig: {
-              maxOutputTokens: 1000,
-              temperature: 0.1,
-            },
-          })
-          const headers = { "Content-Type": "application/json" }
+          },
+        ],
+        generationConfig: {
+          maxOutputTokens: 1000,
+          temperature: 0.1,
+        },
+      })
 
-          let response = await fetch(url, {
-            method: "POST",
-            headers,
-            body: geminiPayload,
-            signal: AbortSignal.timeout(18000),
-          })
-          if (response.status === 503) {
-            const { promise, resolve } = Promise.withResolvers<void>()
-            setTimeout(resolve, 1200)
-            await promise
-            response = await fetch(url, {
-              method: "POST",
-              headers,
-              body: geminiPayload,
-              signal: AbortSignal.timeout(18000),
-            })
-          }
-          if (response.ok) {
-            const data = await response.json()
-            const candText = data?.candidates?.[0]?.content?.parts?.[0]?.text
-            if (typeof candText === "string" && candText.trim().length > 0) {
-              return candText.trim()
-            }
-          } else {
-            const errText = await response.text()
-            lastProviderError += `[${url.split("/models/")[1]?.split(":")[0]}: ${errText}] `
-          }
-        } catch (fetchErr) {
-          lastProviderError += `[${url.split("/models/")[1]?.split(":")[0]} err: ${fetchErr instanceof Error ? fetchErr.message : String(fetchErr)}] `
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: geminiPayload,
+        signal: AbortSignal.timeout(35000),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        const candText = data?.candidates?.[0]?.content?.parts?.[0]?.text
+        if (typeof candText === "string" && candText.trim().length > 0) {
+          return candText.trim()
         }
+      } else {
+        const errText = await response.text()
+        lastProviderError = `[Gemini ${response.status}] ${errText}`
       }
     } catch (err) {
       lastProviderError = err instanceof Error ? err.message : String(err)
