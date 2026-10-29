@@ -99,6 +99,32 @@ Cet endpoint peut aussi être interrogé par un service gratuit tiers (ex: [cron
 
 ---
 
+## Configurer l'import photo de planning
+
+Ajoute `GEMINI_API_KEY` dans les variables serveur Vercel, puis redéploie l'application. Ne préfixe pas cette clé par `NEXT_PUBLIC_`.
+Le scanner appelle `gemini-2.5-flash`, avec la réflexion désactivée. La présence d'une clé ne garantit ni quota disponible ni disponibilité du service Google.
+
+Le navigateur optimise la photo en JPEG, puis l'envoie à `/api/ai/scan-image`. Le serveur retranscrit les jours et les repas.
+Il accepte uniquement une réponse finale complète et ignore les blocs de réflexion. Le traitement des fournisseurs est borné à 45 secondes.
+Le client ne relance pas l'analyse par une server action ou un OCR après un échec.
+
+La transcription est ensuite affectée aux dates à partir du début de semaine choisi. Un second samedi en fin de photo ne remplace pas le premier.
+Les cases vides restent vides. Vérifie les propositions avant de les appliquer, notamment les lignes barrées et les accompagnements.
+Les ingrédients proposés pour un nouveau plat viennent des recettes par défaut de l'application, pas de la photo.
+
+La reconnaissance manuscrite utilise une API distante. Elle n'est ni entièrement locale ni garantie exacte.
+Sans clé Vision, l'import photo affiche une erreur explicite. L'onglet texte reste utilisable sans API.
+Les conditions de gratuité et les limites dépendent du [projet Google AI Studio](https://aistudio.google.com/).
+
+Pour vérifier les vraies photos sur une instance, sans simuler l'IA :
+
+```bash
+bun scripts/verify-planning-scan.ts https://myplanifai.vercel.app photo1.png photo2.png photo3.png
+```
+
+Le script affiche les délais, les erreurs HTTP et les créneaux datés. Il conserve les réponses dans `.data/scan-verification/`, exclu de Git.
+Son contrôle de complétude attend sept jours et au moins treize créneaux. Compare aussi les noms et les créneaux à la photo : un statut `PASS` ne mesure pas la fidélité de la transcription.
+
 ## Développement local
 
 1. Copie `.env.example` vers `.env.local` :

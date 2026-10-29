@@ -128,13 +128,9 @@ export function MagicRecipeDialog({
           setPreviewBatch(result.result)
           setSelectedIndices(new Set(result.result.meals.map((_, i) => i)))
           setExpandedIndices(new Set())
-          if (result.usedClientOcr) {
-            toast.success("Déchiffré gratuitement avec l'OCR local !")
-          } else {
-            toast.success(
-              `Planning détecté : ${result.result.meals.length} plat${result.result.meals.length > 1 ? "s" : ""} identifié${result.result.meals.length > 1 ? "s" : ""}`
-            )
-          }
+          toast.success(
+            `Planning détecté : ${result.result.meals.length} plat${result.result.meals.length > 1 ? "s" : ""} identifié${result.result.meals.length > 1 ? "s" : ""}`
+          )
         } catch (err) {
           toast.error(actionErrorMessage(err))
         } finally {

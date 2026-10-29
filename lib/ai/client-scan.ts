@@ -40,7 +40,7 @@ function isImageResult(value: unknown): value is ExtractedImageResult {
 export async function scanImageClient(
   formData: FormData,
   onProgress?: (percent: number, label: string) => void
-): Promise<ExtractedImageResult & { usedClientOcr?: boolean }> {
+): Promise<ExtractedImageResult> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 58000)
   const timeoutMessage =

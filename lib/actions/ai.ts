@@ -31,9 +31,10 @@ function readGeminiTranscription(data: unknown): string {
     throw new Error("Gemini n'a retourné aucune transcription.")
   }
   const text: string[] = []
-  for (const part of candidate.content.parts) {
-    if (typeof part !== "object" || part === null || part.thought === true) continue
-    if (typeof part.text === "string") text.push(part.text)
+  const parts: unknown[] = candidate.content.parts
+  for (const part of parts) {
+    if (typeof part !== "object" || part === null || ("thought" in part && part.thought === true)) continue
+    if ("text" in part && typeof part.text === "string") text.push(part.text)
   }
   const transcription = text.join("").trim()
   if (!transcription) throw new Error("Gemini n'a retourné aucune transcription finale.")
@@ -49,6 +50,7 @@ Dimanche midi : Steak / Pommes de terre
 
 Lis toute la photo jusqu'en bas, pas seulement les premiers jours.
 Sous chaque jour, la première ligne est le midi et la seconde le soir, sauf indication contraire.
+Une ligne manuscrite précédée d'un nouveau tiret est un AUTRE créneau, même sans jour répété : ne fusionne jamais le midi et le soir.
 Conserve les accompagnements sur la même ligne que le plat.
 Transcris les restes comme "Reste" ou "Reste de [plat]".
 Pour une case vide, illisible ou barrée, écris "non renseigné" : n'invente aucun repas.
@@ -85,7 +87,7 @@ export async function transcribeImageBuffer(
   // 1. Mode Gemini Vision si configuré
   if (geminiKey) {
     try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${geminiKey}`
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`
       const geminiPayload = JSON.stringify({
         contents: [
           {
@@ -105,7 +107,7 @@ export async function transcribeImageBuffer(
         generationConfig: {
           maxOutputTokens: 4096,
           temperature: 0.1,
-          thinkingConfig: { thinkingLevel: "MINIMAL", includeThoughts: false },
+          thinkingConfig: { thinkingBudget: 0, includeThoughts: false },
         },
       })
 
