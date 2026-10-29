@@ -102,7 +102,7 @@ Cet endpoint peut aussi être interrogé par un service gratuit tiers (ex: [cron
 ## Configurer l'import photo de planning
 
 Ajoute `GEMINI_API_KEY` dans les variables serveur Vercel, puis redéploie l'application. Ne préfixe pas cette clé par `NEXT_PUBLIC_`.
-Le scanner appelle `gemini-2.5-flash`, avec la réflexion désactivée. La présence d'une clé ne garantit ni quota disponible ni disponibilité du service Google.
+Le scanner appelle `gemini-3.8-flash`, avec une réflexion limitée au niveau `LOW`. La présence d'une clé ne garantit ni quota disponible ni disponibilité du service Google.
 
 Le navigateur optimise la photo en JPEG, puis l'envoie à `/api/ai/scan-image`. Le serveur retranscrit les jours et les repas.
 Il accepte uniquement une réponse finale complète et ignore les blocs de réflexion. Le traitement des fournisseurs est borné à 45 secondes.

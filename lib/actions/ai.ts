@@ -87,7 +87,7 @@ export async function transcribeImageBuffer(
   // 1. Mode Gemini Vision si configuré
   if (geminiKey) {
     try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${geminiKey}`
       const geminiPayload = JSON.stringify({
         contents: [
           {
@@ -107,7 +107,7 @@ export async function transcribeImageBuffer(
         generationConfig: {
           maxOutputTokens: 4096,
           temperature: 0.1,
-          thinkingConfig: { thinkingBudget: 0, includeThoughts: false },
+          thinkingConfig: { thinkingLevel: "LOW", includeThoughts: false },
         },
       })
 
