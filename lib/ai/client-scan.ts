@@ -75,28 +75,8 @@ export async function scanImageClient(
     throw new Error(data.error || `Erreur d'analyse (${res.status})`)
   } catch (apiErr) {
     if (apiErr instanceof Error && apiErr.name === "TimeoutError") {
-      // Si l'IA en ligne a mis trop de temps, repli local gratuit
-      if (file) {
-        onProgress?.(30, "Repli sur l'OCR local gratuit...")
-        const ocrText = await performClientOcr(file, onProgress)
-        if (ocrText && ocrText.trim().length >= 5) {
-          const result = extractMealsFromText(ocrText, "image", "list")
-          const recipe = result.meals[0] || {
-            title: "Nouvelle recette",
-            ingredients: [],
-            detailedIngredients: [],
-            source: "image" as const,
-          }
-          return {
-            transcribedText: ocrText,
-            result,
-            recipe,
-            usedClientOcr: true,
-          }
-        }
-      }
       throw new Error(
-        "L'analyse en ligne a pris trop de temps. Vérifiez votre connexion ou saisissez le texte directement."
+        "L'analyse par l'IA a pris trop de temps (délai dépassé). Réessayez avec une photo plus nette ou utilisez l'onglet Texte / Dictée."
       )
     }
 

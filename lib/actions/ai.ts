@@ -67,10 +67,9 @@ export async function transcribeImageBuffer(
   if (geminiKey) {
     try {
       const models = [
+        "gemini-flash-lite-latest",
+        "gemini-2.5-flash-lite",
         "gemini-flash-latest",
-        "gemini-3.5-flash",
-        "gemini-3.7-flash",
-        "gemini-3.8-flash",
       ]
       const geminiUrls = models.map(
         (m) =>
@@ -105,7 +104,7 @@ export async function transcribeImageBuffer(
             method: "POST",
             headers,
             body: geminiPayload,
-            signal: AbortSignal.timeout(45000),
+            signal: AbortSignal.timeout(18000),
           })
           if (response.status === 503) {
             const { promise, resolve } = Promise.withResolvers<void>()
@@ -115,7 +114,7 @@ export async function transcribeImageBuffer(
               method: "POST",
               headers,
               body: geminiPayload,
-              signal: AbortSignal.timeout(45000),
+              signal: AbortSignal.timeout(18000),
             })
           }
           if (response.ok) {
