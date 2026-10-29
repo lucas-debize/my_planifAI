@@ -31,7 +31,7 @@ export function PageHeader({
               <ArrowLeft className="size-4.5" />
             </Link>
           ) : null}
-          <h1 className="truncate font-fraunces text-xl font-bold tracking-tight text-ink sm:text-2xl md:text-3xl subpixel-antialiased">
+          <h1 className="truncate font-fraunces text-xl font-bold tracking-tight text-ink sm:text-2xl md:text-3xl">
             {title}
           </h1>
         </div>

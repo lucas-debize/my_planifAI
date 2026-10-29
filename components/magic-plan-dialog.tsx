@@ -24,7 +24,6 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { parseISODate, slotTitleDate } from "@/lib/dates"
@@ -472,8 +471,8 @@ function MagicPlanModalContent({
               </div>
             </div>
 
-            {/* Liste des propositions créneau par créneau */}
-            <ScrollArea className="flex-1 max-h-[46vh] pr-2">
+            {/* Liste des propositions créneau par créneau (défilement tactile fluide) */}
+            <div className="flex-1 min-h-0 max-h-[50vh] overflow-y-auto overscroll-contain pr-1 touch-pan-y" style={{ WebkitOverflowScrolling: "touch" }}>
               <div className="flex flex-col gap-2 py-1">
                 {proposals.map((proposal, index) => {
                   const parsed = parseISODate(proposal.date)
@@ -524,7 +523,7 @@ function MagicPlanModalContent({
                   )
                 })}
               </div>
-            </ScrollArea>
+            </div>
 
             <DialogFooter className="mt-2 flex-col gap-2 sm:flex-row sm:justify-between">
               <span className="text-xs text-muted-foreground self-center">
@@ -761,8 +760,7 @@ function MagicPlanModalContent({
                   Scanner à nouveau
                 </Button>
               </div>
-
-              <ScrollArea className="flex-1 max-h-[46vh] pr-2">
+              <div className="flex-1 min-h-0 max-h-[50vh] overflow-y-auto overscroll-contain pr-1 touch-pan-y" style={{ WebkitOverflowScrolling: "touch" }}>
                 <div className="flex flex-col gap-2 py-1">
                   {detectedSlots.map((slot, idx) => {
                     const parsed = parseISODate(slot.date)
@@ -819,8 +817,7 @@ function MagicPlanModalContent({
                     )
                   })}
                 </div>
-              </ScrollArea>
-
+              </div>
               <DialogFooter className="mt-2 flex-col gap-2 sm:flex-row sm:justify-end">
                 <Button
                   type="button"

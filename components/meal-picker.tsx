@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react"
 import Link from "next/link"
-import { ArrowLeft, Check, Sparkles, User, Users } from "lucide-react"
+import { ArrowLeft, Check, RefreshCw, Sparkles, User, Users, X } from "lucide-react"
 import { toast } from "sonner"
 import { normalizeName } from "@/lib/ingredients"
 import { STAPLE_MEALS } from "@/lib/ai/auto-planner"
@@ -77,6 +77,12 @@ export function MealPicker({
   const [creating, setCreating] = useState(false)
   const [pickingReste, setPickingReste] = useState(false)
   const [pickingId, setPickingId] = useState<string | null>(null)
+  const [aiProposal, setAiProposal] = useState<{
+    id?: string
+    name: string
+    ingredients: string[]
+    origin: "catalog" | "ai"
+  } | null>(null)
   const closeTimer = useRef<number | null>(null)
   const parsed = parseISODate(date)
   const dateLabel = parsed ? slotTitleDate(parsed) : date
@@ -176,6 +182,7 @@ export function MealPicker({
     setPickingReste(false)
     setQuery("")
     setPickingId(null)
+    setAiProposal(null)
   }
 
   function assign(
@@ -196,13 +203,17 @@ export function MealPicker({
       reduce ? 0 : 180
     )
   }
-  async function handleAiSuggestSlot() {
+  function handleAiSuggestSlot() {
     tapFeedback()
     const usedNames = new Set(
       weekSlots
         .filter((s) => s.meal?.name)
         .map((s) => normalizeName(s.meal!.name))
     )
+
+    if (aiProposal) {
+      usedNames.add(normalizeName(aiProposal.name))
+    }
 
     // 1. Priorité au carnet d'idées de l'utilisateur
     const availableFromCatalog = meals.filter(
@@ -211,8 +222,12 @@ export function MealPicker({
 
     if (availableFromCatalog.length > 0) {
       const chosen = availableFromCatalog[Math.floor(Math.random() * availableFromCatalog.length)]
-      assign({ id: chosen.id, name: chosen.name }, "normal")
-      toast.success(`Plat suggéré depuis votre carnet : ${chosen.name}`)
+      setAiProposal({
+        id: chosen.id,
+        name: chosen.name,
+        ingredients: chosen.ingredients.map((i) => i.name),
+        origin: "catalog",
+      })
       return
     }
 
@@ -224,16 +239,31 @@ export function MealPicker({
       ? availableStaples[Math.floor(Math.random() * availableStaples.length)]
       : STAPLE_MEALS[Math.floor(Math.random() * STAPLE_MEALS.length)]
 
-    try {
-      const created = await upsertMeal({
-        name: staple.name,
-        ingredientNames: staple.ingredients.map((ing) => ({ name: ing })),
-      })
-      assign({ id: created.id, name: created.name }, "normal")
-      toast.success(`Idée suggérée par l'IA : ${created.name}`)
-    } catch {
-      toast.error("Impossible de générer une suggestion pour le moment.")
+    setAiProposal({
+      name: staple.name,
+      ingredients: staple.ingredients,
+      origin: "ai",
+    })
+  }
+
+  async function handleConfirmAiProposal() {
+    if (!aiProposal) return
+    if (aiProposal.id) {
+      assign({ id: aiProposal.id, name: aiProposal.name }, "normal")
+      toast.success(`Plat « ${aiProposal.name} » ajouté au créneau`)
+    } else {
+      try {
+        const created = await upsertMeal({
+          name: aiProposal.name,
+          ingredientNames: aiProposal.ingredients.map((ing) => ({ name: ing })),
+        })
+        assign({ id: created.id, name: created.name }, "normal")
+        toast.success(`Plat « ${created.name} » ajouté au créneau`)
+      } catch {
+        toast.error("Impossible d'enregistrer ce plat.")
+      }
     }
+    setAiProposal(null)
   }
 
 
@@ -351,6 +381,62 @@ export function MealPicker({
           <span className="truncate">Remplir avec l&apos;IA</span>
         </Button>
       </div>
+
+      {/* Proposition IA à confirmer avant d'assigner */}
+      {aiProposal ? (
+        <div className="flex flex-col gap-2 rounded-xl border border-primary/30 bg-primary/5 p-3 text-xs animate-in fade-in-0 duration-150">
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1.5 font-semibold text-primary">
+              <Sparkles className="size-3.5" />
+              <span>Suggestion IA pour ce créneau</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setAiProposal(null)}
+              className="text-muted-foreground hover:text-ink p-0.5"
+              aria-label="Fermer la suggestion"
+            >
+              <X className="size-3.5" />
+            </button>
+          </div>
+
+          <div className="rounded-lg bg-surface border border-line p-2.5 shadow-2xs">
+            <div className="flex items-center justify-between gap-2">
+              <p className="font-fraunces text-sm font-bold text-ink truncate">{aiProposal.name}</p>
+              <span className="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                {aiProposal.origin === "catalog" ? "📖 Carnet" : "✨ IA"}
+              </span>
+            </div>
+            {aiProposal.ingredients.length > 0 ? (
+              <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
+                {aiProposal.ingredients.join(", ")}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="flex items-center gap-2 pt-0.5">
+            <Button
+              type="button"
+              size="sm"
+              className="tap-press h-8 flex-1 bg-primary text-primary-foreground font-semibold text-xs shadow-xs hover:bg-primary/90 gap-1.5"
+              onClick={handleConfirmAiProposal}
+            >
+              <Check className="size-3.5" />
+              <span>Valider ce plat</span>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="tap-press h-8 px-2.5 text-xs border-line hover:bg-muted gap-1 text-muted-foreground hover:text-ink"
+              onClick={handleAiSuggestSlot}
+            >
+              <RefreshCw className="size-3" />
+              <span>Autre idée</span>
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
 
       {/* Onglets selon le contexte (famille ou perso avec groupe) */}

@@ -2,14 +2,19 @@
 
 import { useOptimistic, useState, useTransition } from "react"
 import { toast } from "sonner"
-import { Sparkles } from "lucide-react"
+import { FileDown, MoreHorizontal, Sparkles } from "lucide-react"
 import { MealPicker } from "@/components/meal-picker"
 import { MagicPlanDialog } from "@/components/magic-plan-dialog"
 import { Button } from "@/components/ui/button"
-import { DownloadPdfButton } from "@/components/download-pdf-button"
 import { SlotCard } from "@/components/slot-card"
 import { WeekSwitcher } from "@/components/week-switcher"
 import { PageHeader } from "@/components/page-header"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   setSlot,
   assignPersonalMealToSlot,
@@ -104,27 +109,46 @@ export function WeekBoard({
       <PageHeader
         title="Semaine"
         actions={
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="tap-press min-h-10 gap-1.5 rounded-xl border-primary/30 bg-primary/10 text-xs font-semibold text-primary hover:bg-primary/20 shadow-2xs transition-all sm:min-h-11 sm:text-sm"
-              onClick={() => setMagicPlanOpen(true)}
-            >
-              <Sparkles className="size-4 text-primary" />
-              <span className="hidden sm:inline">Remplir avec l&apos;IA</span>
-              <span className="sm:hidden">Remplir IA</span>
-            </Button>
-            <DownloadPdfButton weekStart={weekStart} />
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="tap-press min-h-10 gap-1.5 rounded-xl border-line bg-surface text-xs font-semibold shadow-2xs hover:bg-muted"
+                aria-label="Actions de la semaine"
+              >
+                <MoreHorizontal className="size-4" />
+                <span>Actions</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56 p-1.5 rounded-xl shadow-lg border border-line bg-surface">
+              <DropdownMenuItem
+                className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer"
+                onClick={() => setMagicPlanOpen(true)}
+              >
+                <Sparkles className="size-4 text-primary" />
+                <span>Remplir avec l&apos;IA</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <a
+                  href={`/api/pdf/semaine/${weekStart}`}
+                  download={`myplanifia-${weekStart}.pdf`}
+                  className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer"
+                >
+                  <FileDown className="size-4 text-muted-foreground" />
+                  <span>Télécharger le PDF</span>
+                </a>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         }
       />
       <div className="hidden px-8 pb-4 md:block">
         <WeekSwitcher weekStart={weekStart} hrefFor={hrefForWeek} />
       </div>
 
-      <div className="sticky top-0 z-30 border-b border-line/80 bg-bg/95 backdrop-blur-md px-4 py-2 md:hidden shadow-2xs">
+      <div className="sticky top-0 z-30 border-b border-line/80 bg-bg px-4 py-2 md:hidden shadow-2xs">
         <WeekSwitcher compact weekStart={weekStart} hrefFor={hrefForWeek} />
       </div>
 

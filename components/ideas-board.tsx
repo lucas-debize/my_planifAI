@@ -489,9 +489,9 @@ function MealCardItem({
               <p className="font-fraunces text-lg sm:text-xl font-bold tracking-tight text-ink group-hover:text-primary transition-colors break-words line-clamp-2">
                 {meal.name}
               </p>
-              <div className="flex items-center gap-1.5 shrink-0">
-                {isFamilyMode ? (
-                  meal.createdByName ? (
+              {isFamilyMode ? (
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {meal.createdByName ? (
                     <span className="rounded-full bg-muted/80 px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                       {meal.createdByName}
                     </span>
@@ -499,23 +499,9 @@ function MealCardItem({
                     <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary uppercase tracking-wider">
                       IA
                     </span>
-                  ) : null
-                ) : null}
-
-                {/* Bouton corbeille discret pour suppression directe sans swipe */}
-                <button
-                  type="button"
-                  aria-label={`Supprimer ${meal.name}`}
-                  onClick={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    onRequestDelete(meal)
-                  }}
-                  className="tap-press inline-flex size-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
-                >
-                  <Trash2 className="size-3.5" />
-                </button>
-              </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
             <p className="mt-1 text-xs sm:text-sm text-muted-foreground font-medium">
               {ingredientCountLabel(meal.ingredients.length)}
