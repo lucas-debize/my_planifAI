@@ -61,6 +61,8 @@ export async function transcribeImageBuffer(
   if (!geminiKey && !openaiKey && !glmKey) {
     throw new Error("NO_VISION_KEY")
   }
+  let lastProviderError = ""
+
   // 1. Mode Gemini Vision si configuré (ultra-rapide : ~1.5s)
   if (geminiKey) {
     try {
@@ -89,7 +91,7 @@ export async function transcribeImageBuffer(
                   },
                 ],
               }),
-              signal: AbortSignal.timeout(12000),
+              signal: AbortSignal.timeout(20000),
             }
           )
           if (response.ok) {
@@ -98,13 +100,16 @@ export async function transcribeImageBuffer(
             if (typeof candText === "string" && candText.trim().length > 0) {
               return candText.trim()
             }
+          } else {
+            const errText = await response.text()
+            lastProviderError = `[Gemini ${model} ${response.status}] ${errText}`
           }
-        } catch {
-          // Essayer le modèle de secours
+        } catch (fetchErr) {
+          lastProviderError = fetchErr instanceof Error ? fetchErr.message : String(fetchErr)
         }
       }
-    } catch {
-      // Repli vers les autres fournisseurs
+    } catch (err) {
+      lastProviderError = err instanceof Error ? err.message : String(err)
     }
   }
 
@@ -223,7 +228,9 @@ export async function transcribeImageBuffer(
   }
 
   throw new Error(
-    "Impossible de déchiffrer l'image avec les clés configurées. Vérifiez la validité de votre clé ou la netteté de la photo."
+    lastProviderError
+      ? `Échec de l'analyse : ${lastProviderError}`
+      : "Impossible de déchiffrer l'image avec les clés configurées. Vérifiez la validité de votre clé ou la netteté de la photo."
   )
 }
 
