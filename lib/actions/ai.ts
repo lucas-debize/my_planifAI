@@ -68,37 +68,48 @@ export async function transcribeImageBuffer(
     try {
       const models = [
         "gemini-3.8-flash",
-        "gemini-2.5-flash",
-        "gemini-2.0-flash",
-        "gemini-1.5-flash",
+        "gemini-2.0-flash-exp",
+        "gemini-1.5-pro",
       ]
       for (const model of models) {
         try {
-          const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                contents: [
+          const geminiPayload = JSON.stringify({
+            contents: [
+              {
+                parts: [
                   {
-                    parts: [
-                      {
-                        inlineData: {
-                          mimeType,
-                          data: buffer.toString("base64"),
-                        },
-                      },
-                      {
-                        text: VISION_PROMPT,
-                      },
-                    ],
+                    inlineData: {
+                      mimeType,
+                      data: buffer.toString("base64"),
+                    },
+                  },
+                  {
+                    text: VISION_PROMPT,
                   },
                 ],
-              }),
-              signal: AbortSignal.timeout(20000),
-            }
-          )
+              },
+            ],
+          })
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`
+          const headers = { "Content-Type": "application/json" }
+
+          let response = await fetch(url, {
+            method: "POST",
+            headers,
+            body: geminiPayload,
+            signal: AbortSignal.timeout(28000),
+          })
+          if (response.status === 503) {
+            const { promise, resolve } = Promise.withResolvers<void>()
+            setTimeout(resolve, 1200)
+            await promise
+            response = await fetch(url, {
+              method: "POST",
+              headers,
+              body: geminiPayload,
+              signal: AbortSignal.timeout(28000),
+            })
+          }
           if (response.ok) {
             const data = await response.json()
             const candText = data?.candidates?.[0]?.content?.parts?.[0]?.text
