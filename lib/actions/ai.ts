@@ -66,7 +66,7 @@ export async function transcribeImageBuffer(
   // 1. Mode Gemini Vision si configuré
   if (geminiKey) {
     try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${geminiKey}`
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${geminiKey}`
       const geminiPayload = JSON.stringify({
         contents: [
           {
@@ -89,22 +89,12 @@ export async function transcribeImageBuffer(
         },
       })
 
-      let response = await fetch(url, {
+      const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: geminiPayload,
-        signal: AbortSignal.timeout(20000),
+        signal: AbortSignal.timeout(40000),
       })
-
-      if (response.status === 503) {
-        const fallbackUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${geminiKey}`
-        response = await fetch(fallbackUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: geminiPayload,
-          signal: AbortSignal.timeout(20000),
-        })
-      }
 
       if (response.ok) {
         const data = await response.json()
