@@ -67,11 +67,10 @@ export async function transcribeImageBuffer(
   if (geminiKey) {
     try {
       const models = [
+        "gemini-3.8-flash",
         "gemini-2.5-flash",
         "gemini-2.0-flash",
-        "gemini-2.0-flash-001",
-        "gemini-1.5-flash-latest",
-        "gemini-1.5-flash-8b",
+        "gemini-1.5-flash",
       ]
       for (const model of models) {
         try {
@@ -110,6 +109,8 @@ export async function transcribeImageBuffer(
             const errText = await response.text()
             lastProviderError += `[${model}: ${errText}] `
           }
+        } catch (fetchErr) {
+          lastProviderError += `[${model} err: ${fetchErr instanceof Error ? fetchErr.message : String(fetchErr)}] `
         }
       }
     } catch (err) {
