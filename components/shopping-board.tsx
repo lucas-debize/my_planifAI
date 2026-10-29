@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
-import { ArrowDownAZ, Pencil, Plus, Sparkles, Trash2 } from "lucide-react"
+import { ArrowDownAZ, FileDown, MoreHorizontal, Pencil, Plus, Sparkles, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
@@ -11,7 +11,13 @@ import { Switch } from "@/components/ui/switch"
 import { EmptyState } from "@/components/empty-state"
 import { PageHeader } from "@/components/page-header"
 import { WeekSwitcher } from "@/components/week-switcher"
-import { DownloadPdfButton } from "@/components/download-pdf-button"
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   addWeekItem,
   removeWeekItem,
@@ -238,7 +244,34 @@ export function ShoppingBoard({
     <>
       <PageHeader
         title="Courses"
-        actions={<DownloadPdfButton weekStart={weekStart} />}
+        actions={
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="tap-press min-h-10 px-2.5 gap-1.5 rounded-xl border-line bg-surface text-xs font-semibold shadow-2xs hover:bg-muted"
+                aria-label="Actions de la liste de courses"
+              >
+                <MoreHorizontal className="size-4" />
+                <span className="hidden sm:inline">Actions</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56 p-1.5 rounded-xl shadow-lg border border-line bg-surface">
+              <DropdownMenuItem asChild>
+                <a
+                  href={`/api/pdf/semaine/${weekStart}`}
+                  download={`myplanifia-courses-${weekStart}.pdf`}
+                  className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer"
+                >
+                  <FileDown className="size-4 text-muted-foreground" />
+                  <span>Télécharger le PDF</span>
+                </a>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        }
       />
       <div className="px-4 md:px-8">
         <WeekSwitcher

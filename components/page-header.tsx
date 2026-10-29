@@ -18,33 +18,33 @@ export function PageHeader({
   const isRootPage = !backHref && showWorkspace && title !== "Compte"
 
   return (
-    <header className="flex flex-col gap-2.5 px-4 py-3 sm:flex-row sm:items-center sm:justify-between md:px-8 border-b border-line/40 bg-bg">
-      <div className="flex w-full items-center justify-between gap-2 sm:w-auto">
-        <div className="flex min-w-0 items-center gap-2">
-          {backHref ? (
-            <Link
-              href={backHref}
-              prefetch={true}
-              className="tap-press inline-flex size-9 shrink-0 items-center justify-center rounded-xl border border-line/60 bg-surface text-ink hover:bg-muted shadow-2xs transition-colors"
-              aria-label={backLabel}
-            >
-              <ArrowLeft className="size-4.5" />
-            </Link>
-          ) : null}
-          <h1 className="truncate font-fraunces text-xl font-bold tracking-tight text-ink sm:text-2xl md:text-3xl">
-            {title}
-          </h1>
-        </div>
-        {isRootPage ? (
-          <WorkspaceSwitcher compact className="sm:hidden shrink-0" />
+    <header className="flex items-center justify-between gap-3 px-4 py-3 md:px-8 border-b border-line bg-bg">
+      <div className="flex min-w-0 items-center gap-2">
+        {backHref ? (
+          <Link
+            href={backHref}
+            prefetch={true}
+            className="tap-press inline-flex size-9 shrink-0 items-center justify-center rounded-xl border border-line bg-surface text-ink hover:bg-muted shadow-2xs transition-colors"
+            aria-label={backLabel}
+          >
+            <ArrowLeft className="size-4.5" />
+          </Link>
         ) : null}
+        <h1 className="truncate font-sans text-xl font-bold tracking-tight text-ink sm:text-2xl md:text-3xl">
+          {title}
+        </h1>
       </div>
 
-      {actions ? (
-        <div className="flex w-full flex-wrap items-center gap-1.5 sm:w-auto sm:gap-2">
-          {actions}
-        </div>
-      ) : null}
+      <div className="flex items-center gap-2 shrink-0">
+        {isRootPage ? (
+          <WorkspaceSwitcher compact className="shrink-0" />
+        ) : null}
+        {actions ? (
+          <div className="flex items-center gap-1.5 shrink-0">
+            {actions}
+          </div>
+        ) : null}
+      </div>
     </header>
   )
 }

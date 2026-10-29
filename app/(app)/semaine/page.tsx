@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation"
-import { currentMondayIso } from "@/lib/dates"
+import { currentWeekStartIso } from "@/lib/dates"
+import { getWeekStartDay } from "@/lib/actions/session"
 
-export default function SemaineIndexPage() {
-  redirect(`/semaine/${currentMondayIso()}`)
+export default async function SemaineIndexPage() {
+  const startDay = await getWeekStartDay()
+  redirect(`/semaine/${currentWeekStartIso(new Date(), startDay)}`)
 }

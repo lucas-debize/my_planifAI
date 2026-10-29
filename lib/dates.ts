@@ -12,6 +12,10 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 export function mondayOf(d: Date): Date {
   return startOfWeek(d, { weekStartsOn: 1 })
 }
+export function weekStartOf(d: Date, startDay: 1 | 6 = 1): Date {
+  return startOfWeek(d, { weekStartsOn: startDay })
+}
+
 
 export function weekDays(monday: Date): Date[] {
   return Array.from({ length: 7 }, (_, i) => addDays(monday, i))
@@ -93,4 +97,7 @@ export function weekdayLong(d: Date): string {
 
 export function currentMondayIso(now = new Date()): string {
   return toISODate(mondayOf(now))
+}
+export function currentWeekStartIso(now = new Date(), startDay: 1 | 6 = 1): string {
+  return toISODate(weekStartOf(now, startDay))
 }

@@ -123,6 +123,46 @@ describe("Auto-planner Magic Fill (Équilibrage & Planification locale)", () => 
       expect(fromCatalog.map((p) => p.meal.id)).toContain("c-2")
       expect(fromCatalog.map((p) => p.meal.id)).toContain("c-3")
     })
+
+    it("applique strictement la consigne 'que du poisson dans la semaine'", () => {
+      const proposals = generateWeekPlanProposal({
+        slots: emptySlots,
+        catalogMeals: [],
+        options: { stockOrCravings: "que du poisson dans la semaine", onlyCatalog: false },
+      })
+
+      expect(proposals.length).toBe(14)
+      for (const p of proposals) {
+        expect(p.meal.category).toBe("poisson")
+      }
+    })
+
+    it("remplit tous les créneaux même avec un carnet réduit en mode carnet uniquement", () => {
+      const miniCatalog: MealWithIngredients[] = [
+        {
+          id: "m-1",
+          name: "Risotto aux champignons",
+          origin: "user",
+          ingredients: [{ id: "i-1", name: "Riz" }],
+        },
+        {
+          id: "m-2",
+          name: "Pâtes au pesto",
+          origin: "user",
+          ingredients: [{ id: "i-2", name: "Pesto" }],
+        },
+      ]
+      const proposals = generateWeekPlanProposal({
+        slots: emptySlots,
+        catalogMeals: miniCatalog,
+        options: { onlyCatalog: true },
+      })
+
+      expect(proposals.length).toBe(14)
+      for (const p of proposals) {
+        expect(["m-1", "m-2"]).toContain(p.meal.id!)
+      }
+    })
   })
 
   describe("rerollSlot", () => {

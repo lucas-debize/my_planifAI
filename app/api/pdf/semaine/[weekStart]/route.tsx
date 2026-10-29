@@ -4,7 +4,7 @@ import { WeekDocument } from "@/components/pdf/week-document"
 import { createClient } from "@/lib/supabase/server"
 import { getWeekSlots } from "@/lib/domain/slots"
 import { getPlanningScope } from "@/lib/actions/session"
-import { isMonday, parseISODate, weekLabel } from "@/lib/dates"
+import { parseISODate, weekLabel } from "@/lib/dates"
 
 export const runtime = "nodejs"
 
@@ -21,7 +21,7 @@ export async function GET(
 
   const { weekStart } = await context.params
   const parsed = parseISODate(weekStart)
-  if (!parsed || !isMonday(parsed)) {
+  if (!parsed) {
     return new NextResponse("Bad Request", { status: 400 })
   }
   const scope = await getPlanningScope()

@@ -94,7 +94,7 @@ export function AppShell({
               return (
                 <li key={item.href}>
                   <Link
-                    href={item.href === "/semaine" ? weekHref : item.href}
+                    href={item.href}
                     prefetch={true}
                     className={cn(
                       "tap-press flex min-h-[3.25rem] flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-medium leading-none transition-all",

@@ -1,9 +1,8 @@
 import { ShoppingBoard } from "@/components/shopping-board"
 import { listWeekIngredients } from "@/lib/actions/shopping"
+import { getWeekStartDay } from "@/lib/actions/session"
 import {
-  currentMondayIso,
-  isMonday,
-  mondayOf,
+  currentWeekStartIso,
   parseISODate,
   toISODate,
 } from "@/lib/dates"
@@ -16,10 +15,11 @@ export default async function CoursesPage({
   searchParams: Promise<{ semaine?: string }>
 }) {
   const { semaine } = await searchParams
-  const parsed = semaine ? parseISODate(semaine) : new Date()
+  const startDay = await getWeekStartDay()
+  const parsed = semaine ? parseISODate(semaine) : null
   const weekStart = parsed
-    ? toISODate(isMonday(parsed) ? parsed : mondayOf(parsed))
-    : currentMondayIso()
+    ? toISODate(parsed)
+    : currentWeekStartIso(new Date(), startDay)
   const lines = await listWeekIngredients(weekStart)
   return <ShoppingBoard key={weekStart} weekStart={weekStart} initialLines={lines} />
 }

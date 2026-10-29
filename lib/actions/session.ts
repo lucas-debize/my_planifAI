@@ -5,7 +5,12 @@ import { cookies } from "next/headers"
 import { revalidatePath } from "next/cache"
 import { createClient } from "@/lib/supabase/server"
 import { getMyFamily } from "@/lib/domain/families"
-import { SCOPE_COOKIE, type PlanningScope } from "@/lib/domain/session"
+import {
+  SCOPE_COOKIE,
+  WEEK_START_DAY_COOKIE,
+  type PlanningScope,
+  type WeekStartDay,
+} from "@/lib/domain/session"
 import type { Database } from "@/lib/database.types"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
@@ -79,6 +84,23 @@ export async function switchPlanningScopeAction(
   cookieStore.set(SCOPE_COOKIE, scope, {
     path: "/",
     httpOnly: true,
+    sameSite: "lax",
+    maxAge: 60 * 60 * 24 * 365,
+  })
+  await revalidateApp()
+}
+
+export async function getWeekStartDay(): Promise<WeekStartDay> {
+  const cookieStore = await cookies()
+  const val = cookieStore.get(WEEK_START_DAY_COOKIE)?.value
+  return val === "6" ? 6 : 1
+}
+
+export async function setWeekStartDayAction(day: WeekStartDay): Promise<void> {
+  const cookieStore = await cookies()
+  cookieStore.set(WEEK_START_DAY_COOKIE, String(day), {
+    path: "/",
+    httpOnly: false,
     sameSite: "lax",
     maxAge: 60 * 60 * 24 * 365,
   })

@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Download, Plus, Search, Sparkles, Trash2, Users, X } from "lucide-react"
+import { Download, MoreHorizontal, Plus, Search, Sparkles, Trash2, Users, X } from "lucide-react"
 import { toast } from "sonner"
 import { PageHeader } from "@/components/page-header"
 import { EmptyState } from "@/components/empty-state"
@@ -28,6 +28,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { MagicRecipeDialog } from "@/components/magic-recipe-dialog"
 import { ingredientCountLabel } from "@/components/meal-picker"
@@ -132,60 +138,57 @@ export function IdeasBoard({
       <PageHeader
         title="Idées"
         actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <MagicRecipeDialog
-              onBatchImported={() => router.refresh()}
-              trigger={
+          <div className="flex items-center gap-1.5 shrink-0">
+            <Button asChild size="sm" className="tap-press min-h-10 gap-1.5 rounded-xl text-xs font-semibold shadow-2xs transition-all sm:min-h-11 sm:text-sm">
+              <Link href="/idees/nouvelle">
+                <Plus className="size-4" />
+                <span className="hidden sm:inline">Nouvelle idée</span>
+              </Link>
+            </Button>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="tap-press min-h-10 gap-1.5 rounded-xl border-primary/30 bg-primary/10 text-xs font-semibold text-primary hover:bg-primary/20 shadow-2xs transition-all sm:min-h-11 sm:text-sm"
+                  className="tap-press min-h-10 px-2.5 gap-1 rounded-xl border-line bg-surface text-xs font-semibold shadow-2xs hover:bg-muted"
+                  aria-label="Options d'importation"
                 >
-                  <Sparkles className="size-4 text-primary" />
-                  <span className="hidden sm:inline">Import planning (photo, texte)</span>
-                  <span className="sm:hidden">Import planning</span>
+                  <MoreHorizontal className="size-4" />
                 </Button>
-              }
-            />
-            {isFamilyMode && personalMeals.length > 0 ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="tap-press min-h-10 gap-1.5 rounded-xl border-line bg-surface text-xs font-semibold hover:bg-muted shadow-2xs transition-all sm:min-h-11 sm:text-sm"
-                onClick={() => {
-                  setSelectedMealIds(new Set(personalMeals.map((m) => m.id)))
-                  setImportOpen(true)
-                }}
-              >
-                <Download className="size-4" />
-                <span className="hidden sm:inline">Importer mes recettes perso</span>
-                <span className="sm:hidden">Importer perso</span>
-              </Button>
-            ) : null}
-            {!isFamilyMode && familyMeals.length > 0 ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="tap-press min-h-10 gap-1.5 rounded-xl border-line bg-surface text-xs font-semibold hover:bg-muted shadow-2xs transition-all sm:min-h-11 sm:text-sm"
-                onClick={() => {
-                  setSelectedMealIds(new Set(familyMeals.map((m) => m.id)))
-                  setImportOpen(true)
-                }}
-              >
-                <Download className="size-4" />
-                <span className="hidden sm:inline">Importer les recettes du groupe</span>
-                <span className="sm:hidden">Importer groupe</span>
-              </Button>
-            ) : null}
-            <Button asChild size="sm" className="tap-press min-h-10 gap-1.5 rounded-xl text-xs font-semibold shadow-2xs transition-all sm:min-h-11 sm:text-sm">
-              <Link href="/idees/nouvelle">
-                <Plus className="size-4" />
-                <span>Nouvelle idée</span>
-              </Link>
-            </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64 p-1.5 rounded-xl shadow-lg border border-line bg-surface">
+                <MagicRecipeDialog
+                  onBatchImported={() => router.refresh()}
+                  trigger={
+                    <DropdownMenuItem
+                      onSelect={(e) => e.preventDefault()}
+                      className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer"
+                    >
+                      <Sparkles className="size-4 text-primary" />
+                      <span>Importer un planning (photo / texte)</span>
+                    </DropdownMenuItem>
+                  }
+                />
+                {importableMeals.length > 0 ? (
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setSelectedMealIds(new Set(importableMeals.map((m) => m.id)))
+                      setImportOpen(true)
+                    }}
+                    className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer"
+                  >
+                    <Download className="size-4 text-muted-foreground" />
+                    <span>
+                      {isFamilyMode
+                        ? "Importer mes recettes perso"
+                        : "Importer les recettes du groupe"}
+                    </span>
+                  </DropdownMenuItem>
+                ) : null}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         }
       />

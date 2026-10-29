@@ -69,6 +69,78 @@ export const STAPLE_MEALS: {
     category: "poisson",
     isLight: true,
   },
+  {
+    name: "Dorade royale au four et pommes de terre fondantes",
+    ingredients: ["Dorade", "Pommes de terre", "Oignon", "Huile d'olive", "Romarin"],
+    category: "poisson",
+    isLight: true,
+  },
+  {
+    name: "Truite meunière aux amandes et haricots verts",
+    ingredients: ["Truite", "Amandes effilées", "Haricots verts", "Beurre", "Citron"],
+    category: "poisson",
+    isLight: true,
+  },
+  {
+    name: "Tagliatelles au saumon frais et aneth",
+    ingredients: ["Tagliatelles", "Pavé de saumon", "Crème fraîche", "Aneth", "Citron"],
+    category: "poisson",
+    isLight: false,
+  },
+  {
+    name: "Lieu noir poêlé et fondue de poireaux",
+    ingredients: ["Lieu noir", "Poireaux", "Crème fraîche", "Riz", "Moutarde"],
+    category: "poisson",
+    isLight: true,
+  },
+  {
+    name: "Papillote de merlu aux petits légumes",
+    ingredients: ["Merlu", "Carottes", "Courgettes", "Poivrons", "Huile d'olive"],
+    category: "poisson",
+    isLight: true,
+  },
+  {
+    name: "Tartare de saumon avocat et riz sésame",
+    ingredients: ["Saumon frais", "Avocat", "Riz vinaigré", "Sauce soja", "Sésame"],
+    category: "poisson",
+    isLight: true,
+  },
+  {
+    name: "Risotto aux crevettes et parmesan",
+    ingredients: ["Riz arborio", "Crevettes", "Parmesan", "Oignon", "Bouillon de légumes"],
+    category: "poisson",
+    isLight: false,
+  },
+  {
+    name: "Poisson blanc à la bordelaise et riz",
+    ingredients: ["Poisson blanc", "Chapelure", "Échalote", "Persil", "Riz"],
+    category: "poisson",
+    isLight: true,
+  },
+  {
+    name: "Tarte au thon et à la tomate",
+    ingredients: ["Pâte brisée", "Thon en boîte", "Tomates", "Moutarde", "Gruyère râpé"],
+    category: "poisson",
+    isLight: false,
+  },
+  {
+    name: "Moules marinières et frites",
+    ingredients: ["Moules", "Vin blanc", "Échalote", "Persil", "Frites"],
+    category: "poisson",
+    isLight: false,
+  },
+  {
+    name: "Couscous de poisson et légumes",
+    ingredients: ["Filet de poisson", "Semoule", "Courgettes", "Carottes", "Pois chiches"],
+    category: "poisson",
+    isLight: false,
+  },
+  {
+    name: "Dos de cabillaud en croûte d'herbes et purée",
+    ingredients: ["Cabillaud", "Persil", "Parmesan", "Pommes de terre", "Beurre"],
+    category: "poisson",
+    isLight: true,
+  },
 
   // 🥩 Volailles & Viandes
   {
@@ -284,6 +356,16 @@ export function analyzeMealProfile(name: string, ingredientNames: string[]): Mea
     isLight,
   }
 }
+const STOPWORDS: Record<string, true> = {
+  que: true, qui: true, quoi: true, dont: true, dans: true, la: true, le: true,
+  les: true, un: true, une: true, des: true, du: true, de: true, d: true, l: true,
+  et: true, ou: true, en: true, pour: true, avec: true, sans: true, sur: true,
+  sous: true, par: true, semaine: true, repas: true, midi: true, soir: true,
+  jour: true, tous: true, tout: true, toute: true, toutes: true, chaque: true,
+  faire: true, plat: true, plats: true, manger: true, envie: true, stock: true,
+  stocks: true,
+}
+
 
 /**
  * Génère une proposition complète pour remplir tous les créneaux vides de la semaine
@@ -346,27 +428,41 @@ export function generateWeekPlanProposal(params: {
     })
   }
 
-  // Mélanger de façon déterministe/pseudo-aléatoire pour varier
-  const shuffledCatalog = [...catalogCandidates].sort(() => Math.random() - 0.5)
-  const shuffledStaples = [...stapleCandidates].sort(() => Math.random() - 0.5)
+  const rawKeywords = options?.stockOrCravings?.trim()
+    ? options.stockOrCravings
+        .toLowerCase()
+        .split(/[\s,;+.'’]+/)
+        .map((k) => k.trim())
+        .filter((k) => k.length >= 3 && !STOPWORDS[k])
+    : []
 
-  // Si l'utilisateur a spécifié des stocks ou des envies, prioriser les plats correspondants
-  if (options?.stockOrCravings?.trim()) {
-    const keywords = options.stockOrCravings
-      .toLowerCase()
-      .split(/[\s,;+]+/)
-      .map((k) => k.trim())
-      .filter((k) => k.length >= 3)
-
-    if (keywords.length > 0) {
-      const score = (c: PlannedMealCandidate) => {
-        const text = `${c.name} ${c.ingredients.join(" ")}`.toLowerCase()
-        return keywords.filter((kw) => text.includes(kw)).length
-      }
-      shuffledCatalog.sort((a, b) => score(b) - score(a))
-      shuffledStaples.sort((a, b) => score(b) - score(a))
-    }
+  const matchesKeyword = (c: PlannedMealCandidate) => {
+    if (rawKeywords.length === 0) return true
+    const text = `${c.name} ${c.ingredients.join(" ")}`.toLowerCase()
+    return rawKeywords.some(
+      (kw) =>
+        text.includes(kw) ||
+        (kw === "poisson" && c.category === "poisson") ||
+        (kw === "vege" && c.category === "vege") ||
+        (kw === "viande" && c.category === "viande") ||
+        (kw === "feculent" && c.category === "feculent")
+    )
   }
+
+  // Filtrer ou prioriser selon les mots-clés de consigne
+  let catalogPool = [...catalogCandidates]
+  let staplesPool = [...stapleCandidates]
+
+  if (rawKeywords.length > 0) {
+    const matchedCatalog = catalogPool.filter(matchesKeyword)
+    if (matchedCatalog.length > 0) catalogPool = matchedCatalog
+
+    const matchedStaples = staplesPool.filter(matchesKeyword)
+    if (matchedStaples.length > 0) staplesPool = matchedStaples
+  }
+
+  const shuffledCatalog = catalogPool.sort(() => Math.random() - 0.5)
+  const shuffledStaples = staplesPool.sort(() => Math.random() - 0.5)
 
   // 4. Identifier les créneaux vides
   const emptySlots = slots.filter((s) => s.meal === null)
@@ -374,42 +470,51 @@ export function generateWeekPlanProposal(params: {
 
   let lastCategory: MealCategory | null = null
   const usedInProposal = new Set<string>(alreadyUsedNorms)
+  const isEnforcingCraving = rawKeywords.length > 0
 
   for (const slot of emptySlots) {
     const isDinner = slot.slot_kind === "diner"
 
-    // Chercher le meilleur candidat qui n'a pas encore été utilisé
-    // Critères :
-    // - Pas la même catégorie que le repas précédent
-    // - Le soir : favoriser les repas plus légers ou équilibrés
     const findCandidate = (): PlannedMealCandidate | null => {
-      // 1. Essayer d'abord dans le carnet
+      // 1. Essayer dans le carnet
       const catalogMatch = shuffledCatalog.find((c) => {
         const norm = normalizeName(c.name)
         if (usedInProposal.has(norm)) return false
-        if (lastCategory && c.category === lastCategory && shuffledCatalog.length > 2) return false
-        if (isDinner && !c.isLight && Math.random() > 0.7) return false
+        if (!isEnforcingCraving && lastCategory && c.category === lastCategory && shuffledCatalog.length > 2) return false
+        if (!isEnforcingCraving && isDinner && !c.isLight && Math.random() > 0.7) return false
         return true
       })
       if (catalogMatch) return catalogMatch
 
-      // Fallback dans le carnet sans contrainte stricte de catégorie
+      // Fallback dans le carnet sans contrainte de catégorie
       const looseCatalogMatch = shuffledCatalog.find((c) => !usedInProposal.has(normalizeName(c.name)))
-      if (looseCatalogMatch && options?.onlyCatalog) return looseCatalogMatch
+      if (looseCatalogMatch) return looseCatalogMatch
 
+      // Si mode carnet uniquement mais carnet épuisé, recycler les plats du carnet pour ne jamais laisser de trous
+      if (options?.onlyCatalog && shuffledCatalog.length > 0) {
+        const recycled = shuffledCatalog[Math.floor(Math.random() * shuffledCatalog.length)]
+        return recycled
+      }
       if (options?.onlyCatalog) return null
 
       // 2. Chercher dans les staples équilibrés
       const stapleMatch = shuffledStaples.find((c) => {
         const norm = normalizeName(c.name)
         if (usedInProposal.has(norm)) return false
-        if (lastCategory && c.category === lastCategory && shuffledStaples.length > 3) return false
+        if (!isEnforcingCraving && lastCategory && c.category === lastCategory && shuffledStaples.length > 3) return false
         return true
       })
       if (stapleMatch) return stapleMatch
 
       const looseStapleMatch = shuffledStaples.find((c) => !usedInProposal.has(normalizeName(c.name)))
-      return looseStapleMatch ?? looseCatalogMatch ?? null
+      if (looseStapleMatch) return looseStapleMatch
+
+      // Si toutes les idées uniques ont été utilisées mais qu'il reste des créneaux, recycler parmi les staples correspondants
+      if (shuffledStaples.length > 0) {
+        return shuffledStaples[Math.floor(Math.random() * shuffledStaples.length)]
+      }
+
+      return null
     }
 
     const chosen = findCandidate()
@@ -488,13 +593,20 @@ export function rerollSlot(params: {
   if (options?.stockOrCravings?.trim()) {
     const keywords = options.stockOrCravings
       .toLowerCase()
-      .split(/[\s,;+]+/)
+      .split(/[\s,;+.'’]+/)
       .map((k) => k.trim())
-      .filter((k) => k.length >= 3)
+      .filter((k) => k.length >= 3 && !STOPWORDS[k])
     if (keywords.length > 0) {
       const score = (c: PlannedMealCandidate) => {
         const text = `${c.name} ${c.ingredients.join(" ")}`.toLowerCase()
-        return keywords.filter((kw) => text.includes(kw)).length
+        return keywords.filter(
+          (kw) =>
+            text.includes(kw) ||
+            (kw === "poisson" && c.category === "poisson") ||
+            (kw === "vege" && c.category === "vege") ||
+            (kw === "viande" && c.category === "viande") ||
+            (kw === "feculent" && c.category === "feculent")
+        ).length
       }
       const matching = filteredPool.filter((c) => score(c) > 0)
       if (matching.length > 0) {

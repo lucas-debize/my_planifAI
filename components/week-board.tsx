@@ -1,8 +1,9 @@
 "use client"
 
 import { useOptimistic, useState, useTransition } from "react"
+import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { FileDown, MoreHorizontal, Sparkles } from "lucide-react"
+import { CalendarDays, FileDown, MoreHorizontal, Sparkles } from "lucide-react"
 import { MealPicker } from "@/components/meal-picker"
 import { MagicPlanDialog } from "@/components/magic-plan-dialog"
 import { Button } from "@/components/ui/button"
@@ -15,6 +16,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { setWeekStartDayAction } from "@/lib/actions/session"
 import {
   setSlot,
   assignPersonalMealToSlot,
@@ -73,6 +75,7 @@ export function WeekBoard({
   familyMeals?: MealWithIngredients[]
   isFamilyMode?: boolean
 }) {
+  const router = useRouter()
   const visibleWeeks = weeks.filter((week) => parseISODate(week.start))
   const [slots, setSlotsOptimistic] = useOptimistic(
     visibleWeeks.flatMap((week) => week.slots),
@@ -139,6 +142,27 @@ export function WeekBoard({
                   <FileDown className="size-4 text-muted-foreground" />
                   <span>Télécharger le PDF</span>
                 </a>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer"
+                onClick={async () => {
+                  const currentDay = parseISODate(weekStart)?.getDay()
+                  const nextDay: 1 | 6 = currentDay === 6 ? 1 : 6
+                  await setWeekStartDayAction(nextDay)
+                  toast.success(
+                    nextDay === 6
+                      ? "La semaine commence désormais le samedi matin"
+                      : "La semaine commence désormais le lundi matin"
+                  )
+                  router.push("/semaine")
+                }}
+              >
+                <CalendarDays className="size-4 text-primary" />
+                <span>
+                  {parseISODate(weekStart)?.getDay() === 6
+                    ? "Semaine débutant le Lundi"
+                    : "Semaine débutant le Samedi"}
+                </span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

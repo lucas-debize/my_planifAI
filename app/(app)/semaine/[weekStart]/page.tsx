@@ -3,13 +3,12 @@ import { redirect } from "next/navigation"
 import { WeekBoard } from "@/components/week-board"
 import { listMeals, listPersonalMeals, listFamilyMeals } from "@/lib/actions/meals"
 import { getWeekSlots } from "@/lib/actions/slots"
-import { getPlanningScope } from "@/lib/actions/session"
+import { getPlanningScope, getWeekStartDay } from "@/lib/actions/session"
 import {
-  currentMondayIso,
-  isMonday,
-  mondayOf,
+  currentWeekStartIso,
   parseISODate,
   toISODate,
+  weekStartOf,
 } from "@/lib/dates"
 
 export const dynamic = "force-dynamic"
@@ -20,12 +19,15 @@ export default async function SemainePage({
   params: Promise<{ weekStart: string }>
 }) {
   const { weekStart } = await params
+  const startDay = await getWeekStartDay()
   const parsed = parseISODate(weekStart)
   if (!parsed) {
-    redirect(`/semaine/${currentMondayIso()}`)
+    redirect(`/semaine/${currentWeekStartIso(new Date(), startDay)}`)
   }
-  if (!isMonday(parsed)) {
-    redirect(`/semaine/${toISODate(mondayOf(parsed))}`)
+  const dayOfWeek = parsed.getDay()
+  if (dayOfWeek !== (startDay === 6 ? 6 : 1)) {
+    const adjusted = weekStartOf(parsed, startDay)
+    redirect(`/semaine/${toISODate(adjusted)}`)
   }
 
   const nextStart = toISODate(addDays(parsed, 7))
