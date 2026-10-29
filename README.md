@@ -145,6 +145,10 @@ Il conserve chaque réponse dans `.data/scan-verification/`, sous un fichier sta
 Son contrôle de complétude attend sept jours et au moins treize créneaux. Compare aussi les noms et les créneaux à la photo : un statut `PASS` ne mesure pas la fidélité de la transcription, et le nombre de créneaux ne prouve pas les noms.
 Les trois photos d'essai sont un échantillon réel ; aucune lecture n'est garantie.
 
+Vérification réelle du 29 octobre 2026 avec Gemma 4 sur Cloudflare : les trois photos manuscrites ont renvoyé respectivement 14, 14 et 13 créneaux sur sept jours.
+Le parcours photo, l'aperçu défilant et la confirmation ont été exercés dans Chrome à 390 px ; les écritures de confirmation sont restées dans le stockage de développement local et ont survécu au rechargement.
+Les noms manuscrits ambigus restent à relire avant confirmation.
+
 ## Développement local
 
 1. Copie `.env.example` vers `.env.local` :
