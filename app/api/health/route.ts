@@ -28,5 +28,10 @@ export async function GET() {
     status: "ok",
     timestamp: new Date().toISOString(),
     database,
+    aiVision: {
+      geminiConfigured: Boolean(process.env.GEMINI_API_KEY),
+      glmConfigured: Boolean(process.env.GLM_API_KEY || process.env.ZHIPU_API_KEY),
+      openaiConfigured: Boolean(process.env.OPENAI_API_KEY),
+    },
   })
 }

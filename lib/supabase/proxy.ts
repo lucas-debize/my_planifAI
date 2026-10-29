@@ -15,6 +15,7 @@ const PUBLIC_PATHS: Record<string, true> = {
 function isPublicPath(pathname: string) {
   if (PUBLIC_PATHS[pathname]) return true
   if (pathname.startsWith("/api/health")) return true
+  if (pathname.startsWith("/api/ai")) return true
   if (pathname.startsWith("/auth/callback")) return true
   if (pathname.startsWith("/auth/confirm")) return true
   if (pathname.startsWith("/auth/dev")) return true

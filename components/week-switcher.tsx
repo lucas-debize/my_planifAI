@@ -3,9 +3,8 @@
 import Link from "next/link"
 import { addDays } from "date-fns"
 import { ChevronLeft, ChevronRight } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
 import {
-  currentMondayIso,
+  currentWeekStartIso,
   parseISODate,
   toISODate,
   weekLabel,
@@ -26,8 +25,9 @@ export function WeekSwitcher({
   if (!monday) return null
   const prev = toISODate(addDays(monday, -7))
   const next = toISODate(addDays(monday, 7))
-  const current = currentMondayIso() === weekStart
-  const todayIso = currentMondayIso()
+  const isSaturday = monday.getDay() === 6
+  const todayIso = currentWeekStartIso(new Date(), isSaturday ? 6 : 1)
+  const current = todayIso === weekStart
 
   return (
     <div className={cn("flex items-center justify-between gap-2", compact ? "py-1" : "py-2")}>
