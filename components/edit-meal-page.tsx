@@ -6,6 +6,7 @@ import { toast } from "sonner"
 import { PageHeader } from "@/components/page-header"
 import { MealForm } from "@/components/meal-form"
 import { Button } from "@/components/ui/button"
+import { Trash2 } from "lucide-react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,9 +43,11 @@ export function EditMealPage({
             type="button"
             variant="destructive"
             size="sm"
-            className="tap-press min-h-10 rounded-xl px-3 text-xs font-semibold sm:min-h-11 sm:text-sm shadow-2xs"
+            className="tap-press min-h-10 rounded-xl px-3 text-xs font-semibold sm:min-h-11 sm:text-sm shadow-2xs gap-1.5"
+            onClick={() => setOpen(true)}
           >
-            Supprimer
+            <Trash2 className="size-4" />
+            <span>Supprimer</span>
           </Button>
         }
       />
@@ -59,6 +62,18 @@ export function EditMealPage({
             router.push("/idees")
           }}
         />
+        <div className="mt-8 pt-6 border-t border-line/60 flex flex-col gap-2">
+          <p className="text-xs text-muted-foreground font-medium">Zone de danger</p>
+          <Button
+            type="button"
+            variant="outline"
+            className="tap-press w-full min-h-11 border-destructive/30 text-destructive hover:bg-destructive/10 text-sm font-semibold rounded-xl gap-2"
+            onClick={() => setOpen(true)}
+          >
+            <Trash2 className="size-4" />
+            <span>Supprimer ce plat définitivement</span>
+          </Button>
+        </div>
       </div>
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogContent>

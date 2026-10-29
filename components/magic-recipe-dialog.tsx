@@ -6,7 +6,6 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
-  Globe,
   Image as ImageIcon,
   Layers,
   Loader2,
@@ -33,9 +32,8 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { extractRecipeAction } from "@/lib/actions/ai"
 import { scanImageClient } from "@/lib/ai/client-scan"
-import { batchCreateMealsAction, upsertMeal } from "@/lib/actions/meals"
+import { batchCreateMealsAction } from "@/lib/actions/meals"
 import {
-  extractRecipeFromText,
   extractMealsFromText,
   type ExtractedRecipe,
   type ExtractedIngredient,
@@ -56,10 +54,8 @@ export function MagicRecipeDialog({
   trigger?: React.ReactNode
 }) {
   const [open, setOpen] = useState(false)
-  const [tab, setTab] = useState<"text" | "url" | "photo">("text")
+  const [tab, setTab] = useState<"text" | "photo">("text")
   const [textContent, setTextContent] = useState("")
-  const [urlContent, setUrlContent] = useState("")
-
   // Photo state
   const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null)
@@ -71,12 +67,9 @@ export function MagicRecipeDialog({
   const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set())
   const [expandedIndices, setExpandedIndices] = useState<Set<number>>(new Set())
   const [batchNewIng, setBatchNewIng] = useState<Record<number, { name: string; qty: string }>>({})
-  const [newIngName, setNewIngName] = useState("")
-  const [newIngQty, setNewIngQty] = useState("")
   const [isSaving, setIsSaving] = useState(false)
 
   const [isPending, startTransition] = useTransition()
-  const [importMode, setImportMode] = useState<"planning" | "recipe">("planning")
   const [scanStatus, setScanStatus] = useState<string | null>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -84,7 +77,6 @@ export function MagicRecipeDialog({
   function resetAll() {
     setTab("text")
     setTextContent("")
-    setUrlContent("")
     setPhotoFile(null)
     if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl)
     setPhotoPreviewUrl(null)
@@ -94,8 +86,6 @@ export function MagicRecipeDialog({
     setSelectedIndices(new Set())
     setExpandedIndices(new Set())
     setBatchNewIng({})
-    setNewIngName("")
-    setNewIngQty("")
     setIsSaving(false)
   }
 
@@ -130,7 +120,7 @@ export function MagicRecipeDialog({
           setScanStatus("Analyse de la photo...")
           const formData = new FormData()
           formData.append("image", photoFile)
-          formData.append("importMode", importMode)
+          formData.append("importMode", "planning")
           const result = await scanImageClient(formData, (percent, label) => {
             setScanStatus(`${label} (${percent}%)`)
           })
@@ -140,13 +130,9 @@ export function MagicRecipeDialog({
           setExpandedIndices(new Set())
           if (result.usedClientOcr) {
             toast.success("Déchiffré gratuitement avec l'OCR local !")
-          } else if (result.result.kind === "list") {
-            toast.success(
-              `Planning détecté : ${result.result.meals.length} plats identifiés`
-            )
           } else {
             toast.success(
-              `Photo déchiffrée : ${result.result.meals[0]?.detailedIngredients.length ?? 0} ingrédients détectés`
+              `Planning détecté : ${result.result.meals.length} plat${result.result.meals.length > 1 ? "s" : ""} identifié${result.result.meals.length > 1 ? "s" : ""}`
             )
           }
         } catch (err) {
@@ -158,32 +144,25 @@ export function MagicRecipeDialog({
       return
     }
 
-    const content = tab === "text" ? textContent.trim() : urlContent.trim()
+    const content = textContent.trim()
     if (!content) {
-      toast.error(
-        tab === "text"
-          ? "Veuillez coller le texte ou les ingrédients d'une recette."
-          : "Veuillez entrer une adresse URL."
-      )
+      toast.error("Veuillez coller ou dicter vos repas de la semaine.")
       return
     }
 
     startTransition(async () => {
       try {
         const batch = await extractRecipeAction({
-          mode: tab,
+          mode: "text",
           content,
-          importMode,
+          importMode: "planning",
         })
+        setPreviewBatch(batch)
         setSelectedIndices(new Set(batch.meals.map((_, i) => i)))
         setExpandedIndices(new Set())
-        if (batch.kind === "list") {
-          toast.success(`Planning détecté : ${batch.meals.length} plats identifiés`)
-        } else {
-          toast.success(
-            `Recette extraite : ${batch.meals[0]?.detailedIngredients.length ?? 0} ingrédients détectés`
-          )
-        }
+        toast.success(
+          `Planning détecté : ${batch.meals.length} plat${batch.meals.length > 1 ? "s" : ""} identifié${batch.meals.length > 1 ? "s" : ""}`
+        )
       } catch (err) {
         toast.error(actionErrorMessage(err))
       }
@@ -192,17 +171,12 @@ export function MagicRecipeDialog({
 
   function handleReExtractFromTranscribedText() {
     if (!transcribedText.trim()) return
-    const batch = extractMealsFromText(
-      transcribedText,
-      "image",
-      importMode === "planning" ? "list" : undefined
-    )
+    const batch = extractMealsFromText(transcribedText, "image", "list")
+    setPreviewBatch(batch)
     setSelectedIndices(new Set(batch.meals.map((_, i) => i)))
     setExpandedIndices(new Set())
     toast.success(
-      batch.kind === "list"
-        ? `Planning ré-extrait : ${batch.meals.length} plats identifiés`
-        : "Recette ré-extraite depuis le texte corrigé"
+      `Planning ré-extrait : ${batch.meals.length} plat${batch.meals.length > 1 ? "s" : ""} identifié${batch.meals.length > 1 ? "s" : ""}`
     )
   }
 
@@ -231,101 +205,6 @@ export function MagicRecipeDialog({
       else next.add(idx)
       return next
     })
-  }
-
-  function updateSingleMealTitle(title: string) {
-    if (!previewBatch || previewBatch.meals.length === 0) return
-    const updated = [...previewBatch.meals]
-    updated[0] = { ...updated[0], title }
-    setPreviewBatch({ ...previewBatch, meals: updated })
-  }
-
-  function updateSingleIngredient(index: number, patch: Partial<ExtractedIngredient>) {
-    if (!previewBatch || previewBatch.meals.length === 0) return
-    const meal = previewBatch.meals[0]
-    const updated = [...meal.detailedIngredients]
-    updated[index] = { ...updated[index], ...patch }
-    const updatedMeals = [...previewBatch.meals]
-    updatedMeals[0] = {
-      ...meal,
-      detailedIngredients: updated,
-      ingredients: updated.map((i) => i.name),
-    }
-    setPreviewBatch({ ...previewBatch, meals: updatedMeals })
-  }
-
-  function removeSingleIngredient(index: number) {
-    if (!previewBatch || previewBatch.meals.length === 0) return
-    const meal = previewBatch.meals[0]
-    const updated = meal.detailedIngredients.filter((_, i) => i !== index)
-    const updatedMeals = [...previewBatch.meals]
-    updatedMeals[0] = {
-      ...meal,
-      detailedIngredients: updated,
-      ingredients: updated.map((i) => i.name),
-    }
-    setPreviewBatch({ ...previewBatch, meals: updatedMeals })
-  }
-
-  function addSingleIngredient() {
-    if (!previewBatch || previewBatch.meals.length === 0 || !newIngName.trim()) return
-    const meal = previewBatch.meals[0]
-    const newEntry: ExtractedIngredient = {
-      name: newIngName.trim(),
-      quantity: newIngQty.trim() || undefined,
-      raw: `${newIngQty.trim()} ${newIngName.trim()}`.trim(),
-    }
-    const updated = [...meal.detailedIngredients, newEntry]
-    const updatedMeals = [...previewBatch.meals]
-    updatedMeals[0] = {
-      ...meal,
-      detailedIngredients: updated,
-      ingredients: updated.map((i) => i.name),
-    }
-    setPreviewBatch({ ...previewBatch, meals: updatedMeals })
-    setNewIngName("")
-    setNewIngQty("")
-  }
-
-  async function handleConfirmSingleImport() {
-    if (!previewBatch || previewBatch.meals.length === 0) return
-    const meal = previewBatch.meals[0]
-    const finalRecipe: ExtractedRecipe = {
-      title: meal.title.trim() || "Nouvelle recette",
-      ingredients: meal.detailedIngredients.map((i) => i.name),
-      detailedIngredients: meal.detailedIngredients,
-      source: meal.source ?? (tab === "photo" ? "image" : tab),
-      isDefaultRecipe: meal.isDefaultRecipe,
-    }
-
-    if (onRecipeExtracted) {
-      onRecipeExtracted(finalRecipe)
-      toast.success(
-        `Recette « ${finalRecipe.title} » ajoutée (${finalRecipe.detailedIngredients.length} ingrédients)`
-      )
-      setOpen(false)
-      resetAll()
-      return
-    }
-
-    setIsSaving(true)
-    try {
-      const created = await upsertMeal({
-        name: finalRecipe.title,
-        ingredientNames: finalRecipe.detailedIngredients.map((i) => ({
-          name: i.name,
-          quantity: i.quantity,
-        })),
-      })
-      onBatchImported?.([created])
-      toast.success(`Idée « ${created.name} » enregistrée dans vos idées`)
-      setOpen(false)
-      resetAll()
-    } catch (err) {
-      toast.error(actionErrorMessage(err))
-    } finally {
-      setIsSaving(false)
-    }
   }
 
   function updateBatchMealTitle(mealIdx: number, title: string) {
@@ -396,7 +275,7 @@ export function MagicRecipeDialog({
   }
 
   async function handleConfirmBatchImport() {
-    if (!previewBatch || previewBatch.kind !== "list") return
+    if (!previewBatch) return
     const selectedMeals = previewBatch.meals.filter((_, idx) => selectedIndices.has(idx))
     if (selectedMeals.length === 0) {
       toast.error("Veuillez sélectionner au moins un plat à importer.")
@@ -443,7 +322,7 @@ export function MagicRecipeDialog({
             className="tap-press min-h-10 gap-1.5 rounded-xl border-primary/30 bg-primary/10 text-xs font-semibold text-primary hover:bg-primary/20 shadow-2xs transition-all sm:min-h-11 sm:text-sm"
           >
             <Sparkles className="size-4 text-primary" />
-            <span>Import magique IA</span>
+            <span>Import planning IA</span>
           </Button>
         )}
       </DialogTrigger>
@@ -451,36 +330,24 @@ export function MagicRecipeDialog({
       <DialogContent
         className={cn(
           "max-h-[90vh] overflow-y-auto sm:max-w-lg transition-all",
-          previewBatch?.kind === "list" && "sm:max-w-2xl"
+          previewBatch && "sm:max-w-2xl"
         )}
       >
         <DialogHeader>
           <div className="flex items-center gap-2">
             <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              {previewBatch?.kind === "list" ? (
-                <Layers className="size-4" />
-              ) : (
-                <Sparkles className="size-4" />
-              )}
+              <Layers className="size-4" />
             </div>
             <div>
               <DialogTitle className="font-fraunces text-lg">
                 {previewBatch
-                  ? previewBatch.kind === "list"
-                    ? `Planning détecté · ${previewBatch.meals.length} plats identifiés`
-                    : "Recette détectée"
-                  : importMode === "planning"
-                    ? "Import d'un planning de repas"
-                    : "Import d'une recette"}
+                  ? `Planning détecté · ${previewBatch.meals.length} plat${previewBatch.meals.length > 1 ? "s" : ""} identifié${previewBatch.meals.length > 1 ? "s" : ""}`
+                  : "Import d'un planning de repas"}
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground">
                 {previewBatch
-                  ? previewBatch.kind === "list"
-                    ? "Une recette par défaut a été automatiquement attribuée à chaque plat. Ajustez les ingrédients avant d'importer."
-                    : "Vérifiez le titre et ajustez les quantités des ingrédients avant de valider."
-                  : importMode === "planning"
-                    ? "Photographiez ou collez votre semainier pour extraire tous les plats et les ajouter en bloc à vos idées."
-                    : "Photographiez une recette, collez un texte ou entrez un lien pour extraire ses ingrédients avec quantités."}
+                  ? "Une recette par défaut a été automatiquement attribuée à chaque plat. Ajustez les ingrédients avant d'importer."
+                  : "Photographiez ou collez votre semainier pour extraire tous les plats et les ajouter en bloc à vos idées."}
               </DialogDescription>
             </div>
           </div>
@@ -489,43 +356,8 @@ export function MagicRecipeDialog({
         {/* Étape 1 : Saisie de la source (si aucune prévisualisation active) */}
         {!previewBatch ? (
           <>
-            {/* Sélecteur de type d'import */}
-            <div className="flex flex-col gap-1 rounded-xl border border-line/60 bg-muted/20 p-1.5 text-xs">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-1">
-                Type de document à importer
-              </span>
-              <div className="grid grid-cols-2 gap-1 font-medium">
-                <button
-                  type="button"
-                  className={cn(
-                    "flex items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs transition-all",
-                    importMode === "planning"
-                      ? "bg-card text-primary shadow-xs font-bold border border-primary/20"
-                      : "text-muted-foreground hover:text-ink"
-                  )}
-                  onClick={() => setImportMode("planning")}
-                >
-                  <Layers className="size-3.5" />
-                  <span>Planning (idées multiples)</span>
-                </button>
-                <button
-                  type="button"
-                  className={cn(
-                    "flex items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs transition-all",
-                    importMode === "recipe"
-                      ? "bg-card text-primary shadow-xs font-bold border border-primary/20"
-                      : "text-muted-foreground hover:text-ink"
-                  )}
-                  onClick={() => setImportMode("recipe")}
-                >
-                  <Sparkles className="size-3.5" />
-                  <span>Recette unique</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Onglets Texte vs URL vs Photo */}
-            <div className="grid grid-cols-3 rounded-xl bg-muted/60 p-1 text-xs font-medium">
+            {/* Onglets Texte vs Photo */}
+            <div className="grid grid-cols-2 rounded-xl bg-muted/60 p-1 text-xs font-medium">
               <button
                 type="button"
                 className={cn(
@@ -537,20 +369,7 @@ export function MagicRecipeDialog({
                 onClick={() => setTab("text")}
               >
                 <TextQuote className="size-3.5" />
-                <span>Texte</span>
-              </button>
-              <button
-                type="button"
-                className={cn(
-                  "flex items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 transition-all",
-                  tab === "url"
-                    ? "bg-card text-ink shadow-xs font-semibold"
-                    : "text-muted-foreground hover:text-ink"
-                )}
-                onClick={() => setTab("url")}
-              >
-                <Globe className="size-3.5" />
-                <span>Lien Web</span>
+                <span>Texte / Dictée</span>
               </button>
               <button
                 type="button"
@@ -572,30 +391,13 @@ export function MagicRecipeDialog({
                 <Textarea
                   value={textContent}
                   onChange={(e) => setTextContent(e.target.value)}
-                  placeholder={
-                    importMode === "planning"
-                      ? `Collez ou dictez vos repas de la semaine...\n\nExemple :\nSamedi : Haricot vert / Poisson\n- Panini\nDimanche : Steak patate\n- Nems / Riz cantonais\nLundi : Reste\n- Tartiflette\nMardi : Steak frites...`
-                      : `Collez ici une recette complète ou une liste d'ingrédients...\n\nExemple :\nTarte aux poireaux et chèvre\n- 3 poireaux émincés\n- 200g de chèvre\n- 3 oeufs\n- 20cl de crème fraîche`
-                  }
+                  placeholder={`Collez ou dictez vos repas de la semaine...\n\nExemple :\nSamedi : Haricot vert / Poisson\n- Panini\nDimanche : Steak patate\n- Nems / Riz cantonais\nLundi : Reste\n- Tartiflette\nMardi : Steak frites...`}
                   rows={7}
                   className="resize-none font-sans text-xs"
                   disabled={isPending}
                 />
                 <p className="text-[11px] text-muted-foreground">
                   💡 <strong>Astuce</strong> : Touchez l&apos;icône micro du clavier de votre smartphone pour dicter votre liste en 10 secondes !
-                </p>
-              </div>
-            ) : tab === "url" ? (
-              <div className="flex flex-col gap-2">
-                <Input
-                  type="url"
-                  value={urlContent}
-                  onChange={(e) => setUrlContent(e.target.value)}
-                  placeholder="https://www.marmiton.org/recettes/..."
-                  disabled={isPending}
-                />
-                <p className="text-[11px] text-muted-foreground">
-                  Compatible Marmiton, 750g, CuisineAZ, et les blogs culinaires avec données de recettes.
                 </p>
               </div>
             ) : (
@@ -728,7 +530,6 @@ export function MagicRecipeDialog({
                 disabled={
                   isPending ||
                   (tab === "text" && !textContent.trim()) ||
-                  (tab === "url" && !urlContent.trim()) ||
                   (tab === "photo" && !photoFile)
                 }
                 className="gap-2"
@@ -739,22 +540,22 @@ export function MagicRecipeDialog({
                     <span>
                       {tab === "photo"
                         ? scanStatus || "Lecture de la photo..."
-                        : "Extraction..."}
+                        : "Extraction du planning..."}
                     </span>
                   </>
                 ) : (
                   <>
                     <Sparkles className="size-4" />
                     <span>
-                      {tab === "photo" ? "Scanner la photo" : "Extraire les ingrédients"}
+                      {tab === "photo" ? "Scanner le planning" : "Extraire les plats"}
                     </span>
                   </>
                 )}
               </Button>
             </DialogFooter>
           </>
-        ) : previewBatch.kind === "list" ? (
-          /* Étape 2A : Aperçu et ajustement d'une liste de plats / planning */
+        ) : (
+          /* Étape 2 : Aperçu et ajustement des plats du planning */
           <div className="flex flex-col gap-4">
             {/* Barre d'outils et statistiques de sélection */}
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line/60 bg-muted/40 p-2.5">
@@ -1067,220 +868,6 @@ export function MagicRecipeDialog({
               </Button>
             </DialogFooter>
           </div>
-        ) : (
-          /* Étape 2B : Plat unique - Vérification et ajustement des quantités et ingrédients */
-          (() => {
-            const singleRecipe = previewBatch.meals[0] || {
-              title: "Nouvelle recette",
-              ingredients: [],
-              detailedIngredients: [],
-            }
-
-            return (
-              <div className="flex flex-col gap-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex size-6 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                      ✓
-                    </span>
-                    <span className="text-sm font-semibold text-ink">
-                      Recette détectée ({singleRecipe.detailedIngredients.length} ingrédients)
-                    </span>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-xs text-muted-foreground hover:text-ink"
-                    onClick={() => setPreviewBatch(null)}
-                  >
-                    <RotateCcw className="mr-1 size-3" />
-                    Recommencer
-                  </Button>
-                </div>
-
-                {/* Badge d'information si recette par défaut */}
-                {singleRecipe.isDefaultRecipe ? (
-                  <div className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 p-2 text-xs text-primary">
-                    <Sparkles className="size-3.5 shrink-0" />
-                    <span>
-                      <strong>Recette par défaut attribuée :</strong> Ce plat n&apos;avait pas d&apos;ingrédients listés dans la source. Une recette équilibrée a été générée automatiquement et reste modifiable ci-dessous.
-                    </span>
-                  </div>
-                ) : null}
-
-                {/* Titre éditable */}
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="preview-recipe-title" className="text-xs font-medium text-muted-foreground">
-                    Titre de la recette
-                  </label>
-                  <Input
-                    id="preview-recipe-title"
-                    value={singleRecipe.title}
-                    onChange={(e) => updateSingleMealTitle(e.target.value)}
-                    className="font-fraunces text-base font-semibold"
-                    placeholder="Nom de la recette"
-                  />
-                </div>
-
-                {/* Liste des ingrédients avec quantités modulables */}
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-medium text-muted-foreground">
-                      Ingrédients &amp; Quantités modulables
-                    </label>
-                    <span className="text-[11px] text-muted-foreground">
-                      Ajustez les quantités ci-dessous
-                    </span>
-                  </div>
-
-                  <div className="flex max-h-56 flex-col gap-1.5 overflow-y-auto rounded-lg border border-line bg-surface p-2">
-                    {singleRecipe.detailedIngredients.length === 0 ? (
-                      <p className="py-4 text-center text-xs text-muted-foreground">
-                        Aucun ingrédient dans la liste. Ajoutez-en un ci-dessous.
-                      </p>
-                    ) : (
-                      singleRecipe.detailedIngredients.map((ing, idx) => (
-                        <div
-                          key={idx}
-                          className="flex items-center gap-2 rounded-md border border-line/60 bg-background px-2 py-1.5 text-xs transition-colors hover:border-line"
-                        >
-                          {/* Champ Quantité */}
-                          <Input
-                            value={ing.quantity ?? ""}
-                            placeholder="Qté (ex: 200g)"
-                            aria-label={`Quantité de ${ing.name}`}
-                            onChange={(e) =>
-                              updateSingleIngredient(idx, { quantity: e.target.value || undefined })
-                            }
-                            className="h-8 w-24 shrink-0 rounded px-2 py-0.5 font-mono text-xs font-medium"
-                          />
-                          {/* Champ Nom */}
-                          <Input
-                            value={ing.name}
-                            placeholder="Nom de l'ingrédient"
-                            aria-label={`Nom de l'ingrédient ${idx + 1}`}
-                            onChange={(e) =>
-                              updateSingleIngredient(idx, { name: e.target.value })
-                            }
-                            className="h-8 min-w-0 flex-1 rounded px-2 py-0.5 text-xs"
-                          />
-                          {/* Bouton Supprimer */}
-                          <button
-                            type="button"
-                            onClick={() => removeSingleIngredient(idx)}
-                            aria-label={`Supprimer ${ing.name}`}
-                            className="tap-press inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                          >
-                            <X className="size-3.5" />
-                          </button>
-                        </div>
-                      ))
-                    )}
-                  </div>
-
-                  {/* Formulaire rapide pour ajouter un ingrédient */}
-                  <div className="flex items-center gap-2 pt-1">
-                    <Input
-                      value={newIngQty}
-                      onChange={(e) => setNewIngQty(e.target.value)}
-                      placeholder="Qté (ex: 3)"
-                      className="h-8 w-24 shrink-0 text-xs"
-                    />
-                    <Input
-                      value={newIngName}
-                      onChange={(e) => setNewIngName(e.target.value)}
-                      placeholder="Ajouter un ingrédient..."
-                      className="h-8 min-w-0 flex-1 text-xs"
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault()
-                          addSingleIngredient()
-                        }
-                      }}
-                    />
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-8 gap-1 px-2.5 text-xs"
-                      onClick={addSingleIngredient}
-                      disabled={!newIngName.trim()}
-                    >
-                      <Plus className="size-3.5" />
-                      <span>Ajouter</span>
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Volet texte transcrit éditable (si OCR photo) */}
-                {transcribedText ? (
-                  <div className="rounded-lg border border-line bg-muted/30 p-2.5 text-xs">
-                    <div className="flex items-center justify-between">
-                      <button
-                        type="button"
-                        onClick={() => setShowTranscribedText(!showTranscribedText)}
-                        className="flex items-center gap-1.5 text-xs font-medium text-ink hover:underline"
-                      >
-                        <Pencil className="size-3 text-muted-foreground" />
-                        <span>
-                          {showTranscribedText
-                            ? "Masquer le texte retranscrit"
-                            : "Corriger le texte brut reconnu (OCR)"}
-                        </span>
-                      </button>
-                    </div>
-                    {showTranscribedText ? (
-                      <div className="mt-2 flex flex-col gap-2">
-                        <Textarea
-                          value={transcribedText}
-                          onChange={(e) => setTranscribedText(e.target.value)}
-                          rows={5}
-                          className="font-mono text-xs"
-                        />
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="w-fit text-xs"
-                          onClick={handleReExtractFromTranscribedText}
-                        >
-                          <RotateCcw className="mr-1.5 size-3" />
-                          Ré-extraire depuis le texte corrigé
-                        </Button>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                <DialogFooter className="gap-2 sm:gap-0">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setPreviewBatch(null)}
-                    disabled={isSaving}
-                  >
-                    Retour
-                  </Button>
-                  <Button
-                    type="button"
-                    onClick={handleConfirmSingleImport}
-                    disabled={singleRecipe.detailedIngredients.length === 0 || isSaving}
-                    className="gap-2"
-                  >
-                    {isSaving ? (
-                      <Loader2 className="size-4 animate-spin" />
-                    ) : (
-                      <Check className="size-4" />
-                    )}
-                    <span>
-                      {onRecipeExtracted ? "Valider et importer" : "Enregistrer dans mes idées"}
-                    </span>
-                  </Button>
-                </DialogFooter>
-              </div>
-            )
-          })()
         )}
       </DialogContent>
     </Dialog>

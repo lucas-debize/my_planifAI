@@ -39,12 +39,7 @@ export async function POST(req: Request) {
         { status: 422 }
       )
     }
-    const importMode = formData.get("importMode")?.toString() === "recipe" ? "recipe" : "planning"
-    const result = extractMealsFromText(
-      transcribedText,
-      "image",
-      importMode === "planning" ? "list" : undefined
-    )
+    const result = extractMealsFromText(transcribedText, "image", "list")
     const recipe = result.meals[0] || {
       title: "Nouvelle recette",
       ingredients: [],

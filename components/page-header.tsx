@@ -18,7 +18,7 @@ export function PageHeader({
   const isRootPage = !backHref && showWorkspace && title !== "Compte"
 
   return (
-    <header className="flex flex-col gap-2.5 px-4 py-3 sm:flex-row sm:items-center sm:justify-between md:px-8 border-b border-line/40 bg-bg/50">
+    <header className="flex flex-col gap-2.5 px-4 py-3 sm:flex-row sm:items-center sm:justify-between md:px-8 border-b border-line/40 bg-bg">
       <div className="flex w-full items-center justify-between gap-2 sm:w-auto">
         <div className="flex min-w-0 items-center gap-2">
           {backHref ? (
@@ -31,7 +31,7 @@ export function PageHeader({
               <ArrowLeft className="size-4.5" />
             </Link>
           ) : null}
-          <h1 className="truncate font-fraunces text-xl font-bold tracking-tight text-ink sm:text-2xl md:text-3xl">
+          <h1 className="truncate font-fraunces text-xl font-bold tracking-tight text-ink sm:text-2xl md:text-3xl subpixel-antialiased">
             {title}
           </h1>
         </div>

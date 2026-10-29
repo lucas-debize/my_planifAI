@@ -56,7 +56,7 @@ export async function scanImageClient(
             "L'écriture manuscrite sur cette photo n'a pas pu être déchiffrée par l'OCR local. Vous pouvez utiliser l'onglet Texte pour dicter vos repas au micro en 10 secondes ou saisir le texte directement."
           )
         }
-        const result = extractMealsFromText(ocrText, "image")
+        const result = extractMealsFromText(ocrText, "image", "list")
         const recipe = result.meals[0] || {
           title: "Nouvelle recette",
           ingredients: [],
@@ -80,7 +80,7 @@ export async function scanImageClient(
         onProgress?.(30, "Repli sur l'OCR local gratuit...")
         const ocrText = await performClientOcr(file, onProgress)
         if (ocrText && ocrText.trim().length >= 5) {
-          const result = extractMealsFromText(ocrText, "image")
+          const result = extractMealsFromText(ocrText, "image", "list")
           const recipe = result.meals[0] || {
             title: "Nouvelle recette",
             ingredients: [],
@@ -109,7 +109,7 @@ export async function scanImageClient(
       onProgress?.(20, "Déchiffrement 100% gratuit en local...")
       const ocrText = await performClientOcr(file, onProgress)
       if (ocrText && ocrText.trim().length >= 5) {
-        const result = extractMealsFromText(ocrText, "image")
+        const result = extractMealsFromText(ocrText, "image", "list")
         const recipe = result.meals[0] || {
           title: "Nouvelle recette",
           ingredients: [],

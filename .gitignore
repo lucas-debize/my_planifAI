@@ -49,3 +49,6 @@ next-env.d.ts
 
 # OCR models
 *.traineddata
+
+# Local test fixtures
+/tests/fixtures/

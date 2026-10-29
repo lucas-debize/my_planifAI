@@ -6,7 +6,6 @@ import { AlertTriangle, Check, Loader2, Pencil, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { MagicRecipeDialog } from "@/components/magic-recipe-dialog"
 import { ingredientCountLabel } from "@/components/meal-picker"
 import { upsertMeal } from "@/lib/actions/meals"
 import { actionErrorMessage } from "@/lib/errors"
@@ -233,41 +232,7 @@ export function MealForm({
   return (
     <form className="flex flex-col gap-5" onSubmit={onSubmit}>
       <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <Label htmlFor="meal-name">Nom du plat</Label>
-          <MagicRecipeDialog
-            onRecipeExtracted={(extracted) => {
-              if (extracted.title) setName(extracted.title)
-              if (extracted.detailedIngredients && extracted.detailedIngredients.length > 0) {
-                setIngredients((current) => {
-                  const seen = new Set(current.map((i) => normalizeName(i.name)))
-                  const next = [...current]
-                  for (const ing of extracted.detailedIngredients) {
-                    const norm = normalizeName(ing.name)
-                    if (!seen.has(norm)) {
-                      seen.add(norm)
-                      next.push({ name: ing.name, quantity: ing.quantity ?? null })
-                    }
-                  }
-                  return next
-                })
-              } else if (extracted.ingredients.length > 0) {
-                setIngredients((current) => {
-                  const seen = new Set(current.map((i) => normalizeName(i.name)))
-                  const next = [...current]
-                  for (const ing of extracted.ingredients) {
-                    const norm = normalizeName(ing)
-                    if (!seen.has(norm)) {
-                      seen.add(norm)
-                      next.push({ name: ing, quantity: null })
-                    }
-                  }
-                  return next
-                })
-              }
-            }}
-          />
-        </div>
+        <Label htmlFor="meal-name">Nom du plat</Label>
         <Input
           id="meal-name"
           value={name}

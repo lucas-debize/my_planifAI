@@ -240,5 +240,8 @@ Lundi soir : Omelette aux champignons`
     expect(slots[0].kind).toBe("dejeuner")
     expect(slots[1].mealName).toBe("Omelette aux champignons")
     expect(slots[1].kind).toBe("diner")
+    expect(result.result.kind).toBe("list")
+    expect(result.result.meals.length).toBe(2)
+    expect(result.result.meals[0].isDefaultRecipe).toBe(true)
   })
 })

@@ -1,9 +1,9 @@
 "use client"
 
-import { useMemo, useState, useTransition } from "react"
+import { useMemo, useRef, useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ArrowRight, Download, Plus, Search, Sparkles, Users, X } from "lucide-react"
+import { Download, Plus, Search, Sparkles, Trash2, Users, X } from "lucide-react"
 import { toast } from "sonner"
 import { PageHeader } from "@/components/page-header"
 import { EmptyState } from "@/components/empty-state"
@@ -18,11 +18,22 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { MagicRecipeDialog } from "@/components/magic-recipe-dialog"
 import { ingredientCountLabel } from "@/components/meal-picker"
-import { importPersonalMealsAction, importFamilyMealsAction } from "@/lib/actions/meals"
+import { importPersonalMealsAction, importFamilyMealsAction, deleteMeal } from "@/lib/actions/meals"
 import { actionErrorMessage } from "@/lib/errors"
+import { tapFeedback } from "@/hooks/use-press"
 import type { MealWithIngredients } from "@/lib/domain/meals"
 
 export function IdeasBoard({
@@ -43,6 +54,23 @@ export function IdeasBoard({
   const [importOpen, setImportOpen] = useState(false)
   const [selectedMealIds, setSelectedMealIds] = useState<Set<string>>(new Set())
   const [isImporting, startImportTransition] = useTransition()
+  const [mealToDelete, setMealToDelete] = useState<MealWithIngredients | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  async function handleConfirmDelete() {
+    if (!mealToDelete) return
+    setIsDeleting(true)
+    try {
+      await deleteMeal(mealToDelete.id)
+      toast.success(`Plat « ${mealToDelete.name} » supprimé`)
+      setMealToDelete(null)
+      router.refresh()
+    } catch (err) {
+      toast.error(actionErrorMessage(err))
+    } finally {
+      setIsDeleting(false)
+    }
+  }
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -115,8 +143,8 @@ export function IdeasBoard({
                   className="tap-press min-h-10 gap-1.5 rounded-xl border-primary/30 bg-primary/10 text-xs font-semibold text-primary hover:bg-primary/20 shadow-2xs transition-all sm:min-h-11 sm:text-sm"
                 >
                   <Sparkles className="size-4 text-primary" />
-                  <span className="hidden sm:inline">Import magique (photo, texte)</span>
-                  <span className="sm:hidden">Import IA</span>
+                  <span className="hidden sm:inline">Import planning (photo, texte)</span>
+                  <span className="sm:hidden">Import planning</span>
                 </Button>
               }
             />
@@ -237,36 +265,11 @@ export function IdeasBoard({
         <ul className="mt-4 grid gap-3.5 px-4 pb-8 sm:grid-cols-2 lg:grid-cols-3 md:px-8">
           {filtered.map((meal) => (
             <li key={meal.id}>
-              <Link
-                href={`/idees/${meal.id}`}
-                className="tap-press flex flex-col justify-between min-h-24 rounded-2xl border border-line/70 bg-surface p-4 shadow-2xs hover:shadow-xs hover:border-line hover:bg-surface/90 transition-all group"
-              >
-                <div>
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="font-fraunces text-lg sm:text-xl font-bold tracking-tight text-ink group-hover:text-primary transition-colors break-words line-clamp-2">
-                      {meal.name}
-                    </p>
-                    {isFamilyMode ? (
-                      meal.createdByName ? (
-                        <span className="shrink-0 rounded-full bg-muted/80 px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                          {meal.createdByName}
-                        </span>
-                      ) : meal.origin === "ai" ? (
-                        <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary uppercase tracking-wider">
-                          IA
-                        </span>
-                      ) : null
-                    ) : null}
-                  </div>
-                  <p className="mt-1 text-xs sm:text-sm text-muted-foreground font-medium">
-                    {ingredientCountLabel(meal.ingredients.length)}
-                  </p>
-                </div>
-                <div className="mt-3 flex items-center justify-between text-[11px] text-muted-foreground/70 group-hover:text-primary font-semibold transition-colors">
-                  <span>Modifier le plat</span>
-                  <span className="transform group-hover:translate-x-1 transition-transform">→</span>
-                </div>
-              </Link>
+              <MealCardItem
+                meal={meal}
+                isFamilyMode={isFamilyMode}
+                onRequestDelete={setMealToDelete}
+              />
             </li>
           ))}
         </ul>
@@ -352,6 +355,178 @@ export function IdeasBoard({
           </DialogContent>
         </Dialog>
       ) : null}
+
+      {/* Dialogue de confirmation de suppression d'un plat */}
+      <AlertDialog open={mealToDelete !== null} onOpenChange={(open) => !open && setMealToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Supprimer « {mealToDelete?.name} » ?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Les créneaux de planning qui utilisent ce plat deviendront vides. Cette action est irréversible.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting} className="min-h-11">
+              Annuler
+            </AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={isDeleting}
+              className="min-h-11"
+              onClick={(e) => {
+                e.preventDefault()
+                handleConfirmDelete()
+              }}
+            >
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
+  )
+}
+
+function MealCardItem({
+  meal,
+  isFamilyMode,
+  onRequestDelete,
+}: {
+  meal: MealWithIngredients
+  isFamilyMode: boolean
+  onRequestDelete: (meal: MealWithIngredients) => void
+}) {
+  const [offsetX, setOffsetX] = useState(0)
+  const [isSwiping, setIsSwiping] = useState(false)
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null)
+  const longPressTimerRef = useRef<number | undefined>(undefined)
+  const didLongPressRef = useRef(false)
+
+  function handleTouchStart(e: React.TouchEvent) {
+    const touch = e.touches[0]
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY }
+    didLongPressRef.current = false
+    setIsSwiping(false)
+
+    window.clearTimeout(longPressTimerRef.current)
+    longPressTimerRef.current = window.setTimeout(() => {
+      didLongPressRef.current = true
+      tapFeedback()
+      onRequestDelete(meal)
+    }, 500)
+  }
+
+  function handleTouchMove(e: React.TouchEvent) {
+    if (!touchStartRef.current) return
+    const touch = e.touches[0]
+    const deltaX = touch.clientX - touchStartRef.current.x
+    const deltaY = touch.clientY - touchStartRef.current.y
+
+    if (Math.abs(deltaY) > Math.abs(deltaX) && !isSwiping) {
+      window.clearTimeout(longPressTimerRef.current)
+      return
+    }
+
+    if (Math.abs(deltaX) > 10) {
+      window.clearTimeout(longPressTimerRef.current)
+    }
+
+    if (deltaX < 0) {
+      setIsSwiping(true)
+      setOffsetX(Math.max(deltaX, -100))
+    }
+  }
+
+  function handleTouchEnd() {
+    window.clearTimeout(longPressTimerRef.current)
+    if (offsetX < -60) {
+      tapFeedback()
+      onRequestDelete(meal)
+    }
+    setOffsetX(0)
+    setIsSwiping(false)
+    touchStartRef.current = null
+  }
+
+  return (
+    <div className="relative overflow-hidden rounded-2xl group">
+      {/* Fond rouge de suppression révélé au glissement */}
+      <div
+        className="absolute inset-y-0 right-0 flex w-24 items-center justify-center bg-destructive text-white rounded-r-2xl font-semibold text-xs transition-opacity"
+        style={{ opacity: offsetX < -15 ? 1 : 0 }}
+      >
+        <div className="flex flex-col items-center gap-1">
+          <Trash2 className="size-4.5" />
+          <span>Supprimer</span>
+        </div>
+      </div>
+
+      {/* Carte principale */}
+      <div
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
+        style={{
+          transform: `translateX(${offsetX}px)`,
+          transition: isSwiping ? "none" : "transform 200ms ease-out",
+        }}
+        className="relative z-10 bg-surface rounded-2xl border border-line/70 shadow-2xs hover:shadow-xs hover:border-line hover:bg-surface/90 transition-all select-none"
+      >
+        <Link
+          href={`/idees/${meal.id}`}
+          onClick={(e) => {
+            if (didLongPressRef.current || offsetX !== 0) {
+              e.preventDefault()
+            }
+          }}
+          className="tap-press flex flex-col justify-between min-h-24 p-4"
+        >
+          <div>
+            <div className="flex items-start justify-between gap-2">
+              <p className="font-fraunces text-lg sm:text-xl font-bold tracking-tight text-ink group-hover:text-primary transition-colors break-words line-clamp-2">
+                {meal.name}
+              </p>
+              <div className="flex items-center gap-1.5 shrink-0">
+                {isFamilyMode ? (
+                  meal.createdByName ? (
+                    <span className="rounded-full bg-muted/80 px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                      {meal.createdByName}
+                    </span>
+                  ) : meal.origin === "ai" ? (
+                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary uppercase tracking-wider">
+                      IA
+                    </span>
+                  ) : null
+                ) : null}
+
+                {/* Bouton corbeille discret pour suppression directe sans swipe */}
+                <button
+                  type="button"
+                  aria-label={`Supprimer ${meal.name}`}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    onRequestDelete(meal)
+                  }}
+                  className="tap-press inline-flex size-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+              </div>
+            </div>
+            <p className="mt-1 text-xs sm:text-sm text-muted-foreground font-medium">
+              {ingredientCountLabel(meal.ingredients.length)}
+            </p>
+          </div>
+          <div className="mt-3 flex items-center justify-between text-[11px] text-muted-foreground/70 group-hover:text-primary font-semibold transition-colors">
+            <span>Modifier le plat</span>
+            <span className="transform group-hover:translate-x-1 transition-transform">→</span>
+          </div>
+        </Link>
+      </div>
+    </div>
   )
 }

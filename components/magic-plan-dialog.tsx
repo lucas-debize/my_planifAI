@@ -4,7 +4,6 @@ import { useRef, useState, useTransition } from "react"
 import {
   Camera,
   Check,
-  Dices,
   Image as ImageIcon,
   Loader2,
   RefreshCw,
@@ -93,13 +92,13 @@ function MagicPlanModalContent({
   const [activeTab, setActiveTab] = useState<"generator" | "scan">("generator")
 
   // --- État Générateur automatique ---
-  const [vegetarianOnly, setVegetarianOnly] = useState(false)
-  const [onlyCatalog, setOnlyCatalog] = useState(false)
+  const [onlyCatalog, setOnlyCatalog] = useState(true)
+  const [stockOrCravings, setStockOrCravings] = useState("")
   const [proposals, setProposals] = useState<PlanProposal[]>(() =>
     generateWeekPlanProposal({
       slots,
       catalogMeals: meals,
-      options: { mode: "balanced", onlyCatalog: false },
+      options: { mode: "balanced", onlyCatalog: true },
     })
   )
   const [isApplying, startApplyTransition] = useTransition()
@@ -122,10 +121,11 @@ function MagicPlanModalContent({
   const emptySlotsCount = slots.filter((s) => s.meal === null).length
   const effectiveWeekStart = weekStart ?? slots[0]?.slot_date ?? ""
 
-  function generate(veg = vegetarianOnly, catalog = onlyCatalog) {
+  function generate(catalog = onlyCatalog, text = stockOrCravings) {
     const opts: AutoPlanOptions = {
-      mode: veg ? "vegetarian" : "balanced",
+      mode: "balanced",
       onlyCatalog: catalog,
+      stockOrCravings: text,
     }
     const generated = generateWeekPlanProposal({
       slots,
@@ -145,8 +145,9 @@ function MagicPlanModalContent({
       proposals,
       catalogMeals: meals,
       options: {
-        mode: vegetarianOnly ? "vegetarian" : "balanced",
+        mode: "balanced",
         onlyCatalog,
+        stockOrCravings,
       },
     })
 
@@ -413,49 +414,62 @@ function MagicPlanModalContent({
           </div>
         ) : (
           <div className="flex flex-1 flex-col min-h-0 gap-3">
-            {/* Options de filtrage rapide */}
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-muted/40 p-2.5 text-xs">
-              <div className="flex items-center gap-2">
-                <Switch
-                  id="veg-mode"
-                  checked={vegetarianOnly}
-                  onCheckedChange={(checked) => {
-                    setVegetarianOnly(checked)
-                    generate(checked, onlyCatalog)
+            {/* Options et personnalisation */}
+            <div className="flex flex-col gap-2 rounded-xl border border-line bg-muted/30 p-2.5 text-xs">
+              <div className="flex flex-col gap-1.5 w-full">
+                <div className="flex items-center justify-between text-[11px] font-semibold text-muted-foreground">
+                  <span>🥫 En stock ou envie de manger (facultatif)</span>
+                  {stockOrCravings.trim() ? (
+                    <button
+                      type="button"
+                      className="text-[10px] text-primary hover:underline font-normal"
+                      onClick={() => {
+                        setStockOrCravings("")
+                        generate(onlyCatalog, "")
+                      }}
+                    >
+                      Effacer
+                    </button>
+                  ) : null}
+                </div>
+                <Input
+                  value={stockOrCravings}
+                  onChange={(e) => {
+                    setStockOrCravings(e.target.value)
+                    generate(onlyCatalog, e.target.value)
                   }}
+                  placeholder="ex: finir les courgettes, envie de pâtes, poulet..."
+                  className="h-8.5 rounded-lg text-xs bg-surface border-line"
                 />
-                <Label htmlFor="veg-mode" className="cursor-pointer font-medium">
-                  100% Végétarien
-                </Label>
               </div>
 
-              {meals.length >= 3 ? (
+              <div className="flex items-center justify-between pt-1">
                 <div className="flex items-center gap-2">
                   <Switch
                     id="catalog-only"
                     checked={onlyCatalog}
                     onCheckedChange={(checked) => {
                       setOnlyCatalog(checked)
-                      generate(vegetarianOnly, checked)
+                      generate(checked, stockOrCravings)
                     }}
                   />
-                  <Label htmlFor="catalog-only" className="cursor-pointer font-medium">
+                  <Label htmlFor="catalog-only" className="cursor-pointer font-medium text-xs">
                     Mon carnet uniquement
                   </Label>
                 </div>
-              ) : null}
 
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 gap-1 px-2 text-xs"
-                onClick={() => generate(vegetarianOnly, onlyCatalog)}
-                disabled={isApplying}
-              >
-                <RefreshCw className="size-3" />
-                <span>Tout régénérer</span>
-              </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-ink"
+                  onClick={() => generate(onlyCatalog, stockOrCravings)}
+                  disabled={isApplying}
+                >
+                  <RefreshCw className="size-3" />
+                  <span>Tout régénérer</span>
+                </Button>
+              </div>
             </div>
 
             {/* Liste des propositions créneau par créneau */}
@@ -496,14 +510,15 @@ function MagicPlanModalContent({
 
                       <Button
                         type="button"
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
-                        className="size-8 shrink-0 p-0 text-muted-foreground hover:text-ink"
+                        className="tap-press h-8 gap-1.5 shrink-0 px-2.5 text-xs border-line text-muted-foreground hover:text-ink hover:border-line-active"
                         title="Régénérer ce créneau"
                         onClick={() => handleRerollSlot(index)}
                         disabled={isApplying}
                       >
-                        <Dices className="size-4" />
+                        <RefreshCw className="size-3 text-primary" />
+                        <span className="hidden sm:inline">Changer</span>
                       </Button>
                     </div>
                   )

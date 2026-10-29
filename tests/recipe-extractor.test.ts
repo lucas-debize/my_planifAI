@@ -546,6 +546,42 @@ Vendredi - Gnocci lardons .
       expect(samediSoir?.mealName).toBe("Panini")
     })
 
+    it("découpe un semainier manuscrit avec puces simples par jour (Photo 3)", () => {
+      const text = `Samedi
+* Restes
+* Pizza / cake
+Dimanche
+* Haricots verts / poisson
+* Petit pain salé
+Lundi
+* Restes
+* Brocoli / saucisse fumée
+Mardi
+* Restes
+* Bourguignon porc
+Mercredi
+* Restes
+* Hachis parmentier
+Jeudi
+* Restes
+* Pâtes puttanesca
+Vendredi
+* Tacos
+* Pommes noisettes steak`
+
+      const slots = parsePlanningToWeekSlots(text, "2026-10-26")
+      expect(slots.length).toBe(14)
+      const lundiMidi = slots.find((s) => s.date === "2026-10-26" && s.kind === "dejeuner")
+      const lundiSoir = slots.find((s) => s.date === "2026-10-26" && s.kind === "diner")
+      expect(lundiMidi?.mealName).toBe("Restes")
+      expect(lundiSoir?.mealName).toBe("Brocoli / saucisse fumée")
+
+      const venMidi = slots.find((s) => s.date === "2026-10-30" && s.kind === "dejeuner")
+      const venSoir = slots.find((s) => s.date === "2026-10-30" && s.kind === "diner")
+      expect(venMidi?.mealName).toBe("Tacos")
+      expect(venSoir?.mealName).toBe("Pommes noisettes steak")
+    })
+
     it("découpe un semainier avec titres markdown et créneaux explicites (Photo 4)", () => {
       const text = `**Samedi midi :** Grosse salade / Tartine chèvre  
 **Samedi soir :** Cake / Pizza  

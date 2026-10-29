@@ -2,7 +2,11 @@
 
 import { useMemo, useRef, useState } from "react"
 import Link from "next/link"
-import { ArrowLeft, Check, User, Users } from "lucide-react"
+import { ArrowLeft, Check, Sparkles, User, Users } from "lucide-react"
+import { toast } from "sonner"
+import { normalizeName } from "@/lib/ingredients"
+import { STAPLE_MEALS } from "@/lib/ai/auto-planner"
+import { upsertMeal } from "@/lib/actions/meals"
 import {
   Dialog,
   DialogContent,
@@ -192,6 +196,46 @@ export function MealPicker({
       reduce ? 0 : 180
     )
   }
+  async function handleAiSuggestSlot() {
+    tapFeedback()
+    const usedNames = new Set(
+      weekSlots
+        .filter((s) => s.meal?.name)
+        .map((s) => normalizeName(s.meal!.name))
+    )
+
+    // 1. Priorité au carnet d'idées de l'utilisateur
+    const availableFromCatalog = meals.filter(
+      (m) => !usedNames.has(normalizeName(m.name))
+    )
+
+    if (availableFromCatalog.length > 0) {
+      const chosen = availableFromCatalog[Math.floor(Math.random() * availableFromCatalog.length)]
+      assign({ id: chosen.id, name: chosen.name }, "normal")
+      toast.success(`Plat suggéré depuis votre carnet : ${chosen.name}`)
+      return
+    }
+
+    // 2. Repli : proposition équilibrée intelligente
+    const availableStaples = STAPLE_MEALS.filter(
+      (s) => !usedNames.has(normalizeName(s.name))
+    )
+    const staple = availableStaples.length > 0
+      ? availableStaples[Math.floor(Math.random() * availableStaples.length)]
+      : STAPLE_MEALS[Math.floor(Math.random() * STAPLE_MEALS.length)]
+
+    try {
+      const created = await upsertMeal({
+        name: staple.name,
+        ingredientNames: staple.ingredients.map((ing) => ({ name: ing })),
+      })
+      assign({ id: created.id, name: created.name }, "normal")
+      toast.success(`Idée suggérée par l'IA : ${created.name}`)
+    } catch {
+      toast.error("Impossible de générer une suggestion pour le moment.")
+    }
+  }
+
 
   const body = creating ? (
     <MealForm
@@ -270,23 +314,17 @@ export function MealPicker({
     </div>
   ) : (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      {/* Mise en avant du Reste par défaut (la veille) — 1 clic pour poser */}
-      <div className="flex flex-col gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-950 dark:text-amber-200">
-        <div className="flex items-center justify-between">
-          <span className="flex items-center gap-1.5 font-semibold">
-            <span>🍲</span>
-            <span>{previousMealInfo ? previousMealInfo.label : "Reste de la veille"}</span>
-          </span>
-          <span className="text-[10px] text-amber-800/80 dark:text-amber-300/80">
-            0 ingrédient aux courses
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            size="sm"
-            className="tap-press h-8 flex-1 bg-amber-600 text-xs font-semibold text-white shadow-xs hover:bg-amber-700 dark:bg-amber-500 dark:text-zinc-950 dark:hover:bg-amber-400"
-            onClick={() =>
+      {/* Actions rapides sur la même ligne : Reste discret & Suggérer avec l'IA */}
+      <div className="grid grid-cols-2 gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="tap-press h-9 gap-1.5 rounded-xl border-amber-500/30 bg-amber-500/10 text-xs font-semibold text-amber-950 dark:text-amber-200 hover:bg-amber-500/20 shadow-2xs"
+          onClick={() => {
+            if (previousMeals.length > 1) {
+              setPickingReste(true)
+            } else {
               assign(
                 {
                   id: "reste",
@@ -295,21 +333,23 @@ export function MealPicker({
                 "reste"
               )
             }
-          >
-            Poser ce reste
-          </Button>
-          {previousMeals.length > 0 ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="tap-press h-8 border-amber-500/40 text-xs text-amber-900 hover:bg-amber-500/20 dark:text-amber-200"
-              onClick={() => setPickingReste(true)}
-            >
-              Autre reste…
-            </Button>
-          ) : null}
-        </div>
+          }}
+          title={previousMealInfo ? previousMealInfo.label : "Poser un reste"}
+        >
+          <span>🍲</span>
+          <span className="truncate">{previousMealInfo ? "Poser ce reste" : "Poser un reste"}</span>
+        </Button>
+
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="tap-press h-9 gap-1.5 rounded-xl border-primary/30 bg-primary/10 text-xs font-semibold text-primary hover:bg-primary/20 shadow-2xs"
+          onClick={handleAiSuggestSlot}
+        >
+          <Sparkles className="size-3.5 text-primary" />
+          <span className="truncate">Remplir avec l&apos;IA</span>
+        </Button>
       </div>
 
 

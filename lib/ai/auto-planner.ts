@@ -28,6 +28,7 @@ export type PlanProposal = {
 export type AutoPlanOptions = {
   mode?: "balanced" | "vegetarian" | "quick"
   onlyCatalog?: boolean
+  stockOrCravings?: string
 }
 
 // Bibliothèque de recettes familiales équilibrées (100% gratuites, pré-intégrées)
@@ -349,6 +350,24 @@ export function generateWeekPlanProposal(params: {
   const shuffledCatalog = [...catalogCandidates].sort(() => Math.random() - 0.5)
   const shuffledStaples = [...stapleCandidates].sort(() => Math.random() - 0.5)
 
+  // Si l'utilisateur a spécifié des stocks ou des envies, prioriser les plats correspondants
+  if (options?.stockOrCravings?.trim()) {
+    const keywords = options.stockOrCravings
+      .toLowerCase()
+      .split(/[\s,;+]+/)
+      .map((k) => k.trim())
+      .filter((k) => k.length >= 3)
+
+    if (keywords.length > 0) {
+      const score = (c: PlannedMealCandidate) => {
+        const text = `${c.name} ${c.ingredients.join(" ")}`.toLowerCase()
+        return keywords.filter((kw) => text.includes(kw)).length
+      }
+      shuffledCatalog.sort((a, b) => score(b) - score(a))
+      shuffledStaples.sort((a, b) => score(b) - score(a))
+    }
+  }
+
   // 4. Identifier les créneaux vides
   const emptySlots = slots.filter((s) => s.meal === null)
   const proposals: PlanProposal[] = []
@@ -463,8 +482,26 @@ export function rerollSlot(params: {
     }
   }
 
-  const filteredPool = pool.filter((c) => normalizeName(c.name) !== normalizeName(currentMealName))
+  let filteredPool = pool.filter((c) => normalizeName(c.name) !== normalizeName(currentMealName))
   if (filteredPool.length === 0) return null
+
+  if (options?.stockOrCravings?.trim()) {
+    const keywords = options.stockOrCravings
+      .toLowerCase()
+      .split(/[\s,;+]+/)
+      .map((k) => k.trim())
+      .filter((k) => k.length >= 3)
+    if (keywords.length > 0) {
+      const score = (c: PlannedMealCandidate) => {
+        const text = `${c.name} ${c.ingredients.join(" ")}`.toLowerCase()
+        return keywords.filter((kw) => text.includes(kw)).length
+      }
+      const matching = filteredPool.filter((c) => score(c) > 0)
+      if (matching.length > 0) {
+        filteredPool = matching
+      }
+    }
+  }
 
   // Tirage aléatoire
   const index = Math.floor(Math.random() * filteredPool.length)

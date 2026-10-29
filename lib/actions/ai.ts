@@ -15,17 +15,9 @@ export type ExtractedImageResult = {
   error?: string
 }
 
-const VISION_PROMPT = `Tu es un assistant culinaire expert. Analyse attentivement cette photo et identifie sa nature :
+const VISION_PROMPT = `Tu es un assistant culinaire expert. Analyse attentivement cette photo de planning de repas ou semainier (menu de la semaine, tableau de repas, semainier imprimé ou cahier manuscrit).
 
-Cas A : La photo montre une RECETTE UNIQUE détaillée avec des ingrédients (ex: livre de cuisine, fiche recette).
--> Retranscris fidèlement le titre exact et la TOTALITÉ des ingrédients avec leurs quantités sans rien résumer, modifier ni tronquer.
-Format :
-[Titre de la recette]
-Ingrédients :
-- [quantité] [nom]
-
-Cas B : La photo montre un PLANNING DE REPAS ou une LISTE DE PLATS (ex: semainier, tableau de repas, menu manuscrit ou imprimé).
--> 1. Liste d'abord tous les repas par créneaux au format strict suivant (une ligne par créneau, sans gras ** ni puces) :
+Retranscris tous les repas du planning par créneaux au format strict suivant (une ligne par créneau, sans astérisques ** ni puces) :
 Lundi midi : [Nom du plat]
 Lundi soir : [Nom du plat]
 Mardi midi : [Nom du plat]
@@ -43,23 +35,7 @@ Dimanche soir : [Nom du plat]
 
 (Si les créneaux midi/soir ne sont pas explicitement notés, classe les repas dans l'ordre chronologique midi puis soir. Si un repas est un reste, écris simplement "Reste" ou "Reste de [nom]". Ignore les listes de courses annexes ou tâches ménagères).
 
--> 2. Ensuite, pour chaque plat distinct du planning (sauf les restes simples ou sorties restaurant), fournis sa recette :
-=== PLAT : [Nom du plat 1] ===
-Ingrédients :
-- [quantité] [nom]
-=== PLAT : [Nom du plat 2] ===
-Ingrédients :
-- [quantité] [nom]
-(Génère 3 à 5 ingrédients essentiels et équilibrés avec quantités pour chaque plat).
-
-Cas C : PLAT UNIQUE sans ingrédients.
--> Extrais le titre et génère 3 à 5 ingrédients essentiels avec quantités.
-Format :
-[Titre]
-Ingrédients :
-- [quantité] [nom]
-
-Réponds directement avec le texte au format indiqué sans bla-bla.`
+Réponds directement avec les lignes du planning sans aucun commentaire avant ni après.`
 
 export async function transcribeImageBuffer(
   buffer: Buffer,
@@ -135,7 +111,7 @@ export async function transcribeImageBuffer(
   // 2. Mode Zhipu / GLM Vision si configuré
   if (glmKey) {
     try {
-      const models = ["glm-5.3-flash", "glm-4.5v"]
+      const models = ["glm-4.5v", "glm-5.3-flash"]
       for (const model of models) {
         try {
           const response = await fetch(
@@ -292,12 +268,7 @@ export async function extractRecipeFromImageAction(
       "Aucun texte n'a pu être déchiffré sur cette image. Vérifiez la netteté et l'éclairage de la photo, ou configurez une clé d'API Vision (GEMINI_API_KEY, OPENAI_API_KEY ou GLM_API_KEY) pour les semainiers manuscrits."
     )
   }
-  const importMode = formData.get("importMode")?.toString() === "recipe" ? "recipe" : "planning"
-  const result = extractMealsFromText(
-    transcribedText,
-    "image",
-    importMode === "planning" ? "list" : undefined
-  )
+  const result = extractMealsFromText(transcribedText, "image", "list")
   const recipe = result.meals[0] || {
     title: "Nouvelle recette",
     ingredients: [],
@@ -376,11 +347,7 @@ export async function extractRecipeAction(input: {
   }
 
   // Mode texte libre
-  const batch = extractMealsFromText(
-    content,
-    "text",
-    input.importMode === "planning" ? "list" : undefined
-  )
+  const batch = extractMealsFromText(content, "text", "list")
   if (
     batch.meals.length === 0 ||
     (batch.meals.length === 1 &&
