@@ -38,7 +38,7 @@ export async function scanImageClient(
     const res = await fetch("/api/ai/scan-image", {
       method: "POST",
       body: formData,
-      signal: AbortSignal.timeout(40000),
+      signal: AbortSignal.timeout(52000),
     })
 
     const data = await res.json()

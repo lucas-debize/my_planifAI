@@ -105,7 +105,7 @@ export async function transcribeImageBuffer(
             method: "POST",
             headers,
             body: geminiPayload,
-            signal: AbortSignal.timeout(28000),
+            signal: AbortSignal.timeout(45000),
           })
           if (response.status === 503) {
             const { promise, resolve } = Promise.withResolvers<void>()
@@ -115,7 +115,7 @@ export async function transcribeImageBuffer(
               method: "POST",
               headers,
               body: geminiPayload,
-              signal: AbortSignal.timeout(28000),
+              signal: AbortSignal.timeout(45000),
             })
           }
           if (response.ok) {
