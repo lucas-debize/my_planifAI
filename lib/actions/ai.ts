@@ -67,8 +67,9 @@ export async function transcribeImageBuffer(
   if (geminiKey) {
     try {
       const models = [
+        "gemini-2.5-flash-image",
         "gemini-flash-lite-latest",
-        "gemini-2.5-flash-lite",
+        "gemini-3.5-flash-lite",
         "gemini-flash-latest",
       ]
       const geminiUrls = models.map(
@@ -271,7 +272,13 @@ export async function extractRecipeFromImageAction(
 
   const arrayBuffer = await file.arrayBuffer()
   const buffer = Buffer.from(arrayBuffer)
-  const mimeType = file.type || "image/jpeg"
+  let mimeType = file.type
+  if (!mimeType || mimeType === "application/octet-stream") {
+    const ext = file.name?.toLowerCase().split(".").pop()
+    if (ext === "png") mimeType = "image/png"
+    else if (ext === "webp") mimeType = "image/webp"
+    else mimeType = "image/jpeg"
+  }
 
   const customApiKey = formData.get("customApiKey")?.toString()?.trim() || undefined
   let transcribedText: string
