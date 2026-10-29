@@ -66,12 +66,12 @@ export async function transcribeImageBuffer(
   // 1. Mode Gemini Vision si configuré (ultra-rapide : ~1.5s)
   if (geminiKey) {
     try {
-      const models = [
-        "gemini-3.8-flash",
-        "gemini-2.0-flash-exp",
-        "gemini-1.5-pro",
+      const geminiUrls = [
+        `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${geminiKey}`,
+        `https://generativelanguage.googleapis.com/v1/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
       ]
-      for (const model of models) {
+      for (const url of geminiUrls) {
         try {
           const geminiPayload = JSON.stringify({
             contents: [
@@ -94,7 +94,6 @@ export async function transcribeImageBuffer(
               temperature: 0.1,
             },
           })
-          const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`
           const headers = { "Content-Type": "application/json" }
 
           let response = await fetch(url, {
@@ -122,10 +121,10 @@ export async function transcribeImageBuffer(
             }
           } else {
             const errText = await response.text()
-            lastProviderError += `[${model}: ${errText}] `
+            lastProviderError += `[${url.split("/models/")[1]?.split(":")[0]}: ${errText}] `
           }
         } catch (fetchErr) {
-          lastProviderError += `[${model} err: ${fetchErr instanceof Error ? fetchErr.message : String(fetchErr)}] `
+          lastProviderError += `[${url.split("/models/")[1]?.split(":")[0]} err: ${fetchErr instanceof Error ? fetchErr.message : String(fetchErr)}] `
         }
       }
     } catch (err) {
