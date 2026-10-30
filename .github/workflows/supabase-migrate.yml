@@ -26,13 +26,15 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
-          echo "Liaison au projet Supabase cqlbaqkovfykajwryfre..."
+          PROJECT_REF="${SUPABASE_PROJECT_REF:-cqlbaqkovfykajwryfre}"
+          echo "Linking to Supabase project $PROJECT_REF..."
           if [ -n "$SUPABASE_DB_PASSWORD" ]; then
-            supabase link --project-ref cqlbaqkovfykajwryfre --password "$SUPABASE_DB_PASSWORD"
+            supabase link --project-ref "$PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
             supabase db push --password "$SUPABASE_DB_PASSWORD"
           else
-            supabase link --project-ref cqlbaqkovfykajwryfre
+            supabase link --project-ref "$PROJECT_REF"
             supabase db push
           fi
-          echo "Migrations appliquées avec succès sur la base Supabase distante."
+          echo "Migrations successfully applied to remote Supabase database."

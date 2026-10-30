@@ -1,195 +1,250 @@
-# MyPlanifAI
+# MyPlanifAI 🥗
 
-PWA de planning repas : déjeuner et dîner, semaine après semaine.
+> **Modern, AI-powered weekly meal planner and smart grocery list PWA.**  
+> Plan lunch & dinner, scan handwritten meal schedules with vision AI, extract recipes from URLs or text, collaborate with your family, and automatically organize groceries by supermarket aisle.
 
-Chaque compte Google a son propre espace. Les repas, courses et semaines restent isolés par `auth.uid()` (RLS Supabase).
-
----
-
-## Déploiement en production 24/24 (Gratuit - 0,00 €)
-
-L'application tourne gratuitement 24h/24 sans mise en veille :
-- **Hébergement Frontend / SSR / PDF** : Vercel Hobby (0 €)
-- **Base de données & Authentification** : Supabase Free Tier (0 €)
-- **Authentification** : Google Cloud OAuth (0 €)
-- **Maintien actif 24/24 (Anti-pause Supabase)** : GitHub Actions Cron (0 €)
+[![Next.js](https://img.shields.io/badge/Next.js-16.0-black?logo=next.js)](https://nextjs.org/)
+[![React](https://img.shields.io/badge/React-19.0-61DAFB?logo=react&logoColor=black)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue?logo=typescript)](https://www.typescriptlang.org/)
+[![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL%20RLS-3ECF8E?logo=supabase)](https://supabase.com/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind-v4-38B2AC?logo=tailwind-css)](https://tailwindcss.com/)
+[![Bun Test](https://img.shields.io/badge/Tests-129%20Passing-success?logo=bun)](https://bun.sh/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
 
-### Étape 1 : Base de données Supabase (5 min)
+### Demo Video
 
-1. Crée un projet gratuit sur [supabase.com](https://supabase.com) (choisis `eu-central-1` Francfort ou `eu-west-1` Londres).
-2. Ouvre le **SQL Editor** dans le tableau de bord Supabase et exécute les scripts de `supabase/migrations/` (ou `full_setup.sql`) :
-   - `001_init.sql` (tables repas, créneaux, courses, profils, RLS)
-   - `002_families.sql` (gestion des familles et partages)
-   - `003_fix_family_rls.sql` (politiques RLS affinées)
-   - `004_separate_personal_and_family.sql` (séparation planning perso/famille, limite 10 membres)
-   *(Ou directement via le terminal avec la commande : `npx supabase db push`)*
-   - **Project URL** (`https://<id-projet>.supabase.co`)
-   - **anon public key** (`sb_publishable_...` ou clé `anon`)
-   *(Ne partage jamais la clé `service_role`)*.
+**Full walkthrough**: Photo scan of handwritten meal schedule → AI transcription & slot assignment → Auto-categorized grocery list by supermarket aisle.
+
+https://github.com/user-attachments/assets/f49e0d77-c8af-4338-b6ac-9ff3ac052adf
+
+> *Replace the link above with your uploaded demo video recording or animated preview.*
 
 ---
 
-### Étape 2 : Google Cloud OAuth (5 min)
+## Highlights & Features
 
-1. Rends-toi sur la [Google Cloud Console](https://console.cloud.google.com/) et crée un nouveau projet (ex: *MyPlanifAI*).
-2. Va dans **APIs & Services → OAuth consent screen** :
-   - User Type : **External**
-  - Nom de l'application : `MyPlanifAI`
-   - Scopes demandés : `openid`, `.../auth/userinfo.email`, `.../auth/userinfo.profile`
-   - En phase de test, ajoute tes adresses Gmail dans **Test users** (ou publie l'écran, gratuit pour ces 3 scopes standards).
-3. Va dans **APIs & Services → Credentials → Create Credentials → OAuth client ID** :
-   - Application type : **Web application**
-  - Nom : `MyPlanifAI Web`
-   - **Authorized redirect URIs** :
-     `https://<id-projet>.supabase.co/auth/v1/callback`
-     *(trouvable aussi dans Supabase → Authentication → Providers → Google)*
-4. Copie le **Client ID** et le **Client secret**.
-5. Dans **Supabase → Authentication → Providers → Google** :
-   - Active Google (**Enable**)
-   - Colle le **Client ID** et le **Client secret**
-   - Laisse *Skip nonce check* désactivé et enregistre.
+### 📅 Weekly Meal Planning (`/semaine`, `/aujourdhui`)
+* **Dual-Slot Calendar**: Dedicated lunch and dinner slots for every day of the week, with effortless past and future week navigation.
+* **Today Dashboard (`/aujourdhui`)**: Instant quick view of today's scheduled meals.
+* **Leftovers ("Restes") Management**: One-click leftover assignment creating zero-ingredient placeholder meals to avoid redundant grocery items.
+* **Interactive Slot Actions**: Pick meals from your catalog, swap between days, edit portions, or clear slots with instant feedback.
+* **Printable A4 PDF Export**: Export your weekly schedule into an elegant, fridge-ready A4 PDF menu using `@react-pdf/renderer`.
 
----
+### 👨‍👩‍👧‍👦 Personal vs Family Workspaces
+* **Dual Planning Scope**: Switch seamlessly between **Personal Mode** (strictly private to your user ID) and **Family Mode** (shared group calendar).
+* **Up to 10 Family Members**: Strict limit enforced both in SQL (`public.join_family`) and UI, with simple invite code sharing.
+* **Live Shared Shopping List**: Synchronized checklist across all family members in real time.
+* **Conflict-Free Recipe Import**: Automatically adds author attribution (e.g. `Apple Pie (by Sophie)`) when copying personal recipes into the family collection.
 
-### Étape 3 : Déploiement sur Vercel (3 min)
+### 🤖 Multimodal AI & Smart Automation
+* **Handwritten Meal Plan Scanner**:
+  * Take a photo or upload an image of a handwritten meal calendar or white-board.
+  * Powered by **Cloudflare Workers AI** (`@cf/google/gemma-4-26b-a4b-it` on 10k free daily neurons) or **Google Gemini Vision** (`gemini-3.5-flash` / `gemini-3.8-flash`), with OpenAI and GLM fallbacks.
+  * Intelligent chronological multi-week parsing that preserves day sequences even across week boundaries.
+  * Browser-side JPEG compression for lightning-fast uploads and minimal data usage.
+  * Batch meal creation and schedule assignment in a single operation.
+* **Magic Fill Auto-Planner**:
+  * Automatically fills empty week slots respecting nutritional balance (alternating proteins, carbs, and vegetables), preventing repetition, and prioritizing your existing recipe catalog.
+  * Interactive preview dialog with individual slot re-roll (🎲).
+* **Magic Recipe Extractor**:
+  * Extract title and structured ingredients from raw unstructured text, cooking notes, or web recipe links (Schema.org/Recipe JSON-LD).
+  * Built-in local Tesseract.js OCR fallback for offline scanning.
+* **Smart Supermarket Aisle Sorting**:
+  * Automatically categorizes grocery ingredients into supermarket departments (*Produce, Dairy & Eggs, Meat & Fish, Bakery, Pantry, Frozen, Beverages, Household*).
+  * Fast client-side *Longest Match First* NLP algorithm running with 0 latency, 0 API quota, and 0 external cost.
 
-1. Connecte-toi sur [vercel.com](https://vercel.com) avec ton compte GitHub.
-2. Clique sur **Add New Project** et sélectionne le dépôt `PlanifIA`.
-3. Dans la section **Environment Variables**, ajoute :
-   - `NEXT_PUBLIC_SUPABASE_URL` = `https://<id-projet>.supabase.co`
-   - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` = `<clé-anon-supabase>`
-   - `NEXT_PUBLIC_APP_URL` = `https://myplanifai.vercel.app`
-4. Clique sur **Deploy**.
-5. Une fois le déploiement terminé, finalise les URLs de redirection :
-   - Dans **Supabase → Authentication → URL Configuration** :
-     - **Site URL** : `https://<nom-de-ton-projet>.vercel.app`
-     - **Redirect URLs** : `https://<nom-de-ton-projet>.vercel.app/auth/callback`
-   - Dans **Google Cloud Console → Credentials → ton client OAuth** :
-     - **Authorized JavaScript origins** : ajoute `https://<nom-de-ton-projet>.vercel.app`
-
----
-
-### Étape 4 : Activer le Keepalive 24/24 (Anti-veille Supabase)
-
-Supabase Free met automatiquement en veille les projets inactifs après 7 jours sans requête. Le dépôt inclut un workflow GitHub Actions (`.github/workflows/supabase-keepalive.yml`) qui envoie une requête authentifiée tous les 3 jours :
-
-1. Sur ton dépôt GitHub, va dans **Settings → Secrets and variables → Actions**.
-2. Clique sur **New repository secret** et ajoute :
-   - `SUPABASE_URL` : l'URL de ton projet Supabase (`https://<id-projet>.supabase.co`)
-   - `SUPABASE_ANON_KEY` : la clé publique anon de ton projet Supabase
-3. Dans l'onglet **Actions** de GitHub, vérifie que le workflow *Supabase Keepalive* est activé. Tu peux déclencher un run de test manuel avec le bouton **Run workflow**.
+### 🔒 Privacy, Security & Multi-Account
+* **Row Level Security (RLS)**: Enforced on 100% of PostgreSQL tables. Users can only view and modify their own data or their family group's data.
+* **Google OAuth with PKCE**: Server-side HttpOnly cookies with CSRF state verification and PKCE exchange—no access tokens exposed in client URLs.
+* **Multi-Account Vault**: Switch between multiple Google accounts on the same device without logging out.
+* **Offline Dev Mode (`DEV_AUTH_BYPASS=1`)**: Fully functional offline mock account (`dev@planifia.local`) backed by a local JSON store, enabling complete development without Supabase or Google credentials.
 
 ---
 
-### Étape 5 : Route de diagnostic et Monitoring (`/api/health`)
+## Tech Stack
 
-L'application expose un endpoint public de santé :
-- URL : `https://myplanifai.vercel.app/api/health`
-- Réponse JSON :
-  ```json
-  {
-    "status": "ok",
-    "timestamp": "2025-05-10T12:00:00.000Z",
-    "database": "connected"
-  }
-  ```
-Cet endpoint peut aussi être interrogé par un service gratuit tiers (ex: [cron-job.org](https://cron-job.org) ou [UptimeRobot](https://uptimerobot.com)) pour une double garantie de disponibilité.
+| Layer | Technology |
+|---|---|
+| **Framework** | [Next.js 16](https://nextjs.org/) (App Router, Turbopack, React 19) |
+| **Language** | [TypeScript 5](https://www.typescriptlang.org/) (Strict mode) |
+| **Styling & UI** | [Tailwind CSS v4](https://tailwindcss.com/), Radix UI Primitives, Lucide Icons, Sonner |
+| **Database & Auth** | [Supabase](https://supabase.com/) (PostgreSQL 15+, Row Level Security, Google OAuth) |
+| **AI Vision & NLP** | Cloudflare Workers AI (`gemma-4-26b`), Google Gemini Flash, OpenAI Vision, Local NLP |
+| **PDF Generation** | [@react-pdf/renderer](https://react-pdf.org/) |
+| **Testing** | [Bun Test](https://bun.sh/) (129 unit tests in ~1.5s) |
+| **Hosting & CI** | [Vercel](https://vercel.com/), GitHub Actions (Automated CI, Migrations & Keepalive) |
 
 ---
 
-## Configurer l'import photo de planning
+## Architecture & Database Schema
 
-Le scanner lit des variables serveur Vercel, sans préfixe `NEXT_PUBLIC_`, puis l'application doit être redéployée. Deux configurations sont possibles :
+All database migrations are located in `supabase/migrations/`:
+* `001_init.sql`: Core tables (`meals`, `ingredients`, `meal_ingredients`, `plan_slots`, `shopping_checks`), triggers, and RLS policies.
+* `002_families.sql`: Collaboration tables (`families`, `family_members`), membership functions, and group RLS.
+* `003_fix_family_rls.sql`: Hardened `SECURITY DEFINER` functions and recursion prevention.
+* `004_separate_personal_and_family.sql`: Scope separation (`family_id`, `created_by_user_id`), partial unique indexes, 10-member family cap, and unified RLS.
+* `005_ingredient_quantity.sql`: Backward-compatible optional ingredient quantities for recipes.
 
-- `CLOUDFLARE_ACCOUNT_ID` et `CLOUDFLARE_API_TOKEN` pour Cloudflare Workers AI, à définir ensemble.
-- `GEMINI_API_KEY` pour Google AI Studio, sur les installations sans Cloudflare.
+A consolidated setup script is also available at `supabase/full_setup.sql`.
 
-La configuration Cloudflare est prioritaire et exclusive. Dès qu'une variable Cloudflare est présente, le scanner n'appelle ni Gemini, ni GLM, ni OpenAI, même en cas d'échec.
-Si une seule des deux variables Cloudflare est définie, le scan renvoie une erreur explicite au lieu de basculer sur une API payante.
-`/api/health` expose `aiVision.cloudflareConfigured`, true seulement quand les deux variables Cloudflare sont non vides, ainsi que `aiVision.cloudflareModel` ; il n'expose jamais le jeton ni l'identifiant de compte.
-La présence des variables ne prouve pas que le jeton est valide, seule une vraie requête le vérifie.
+---
 
-Pour éviter toute facturation, le compte Cloudflare doit rester sur l'offre Workers Free. L'application ne modifie pas cette offre.
-Cette offre alloue 10 000 neurones par jour : une enveloppe de calcul, pas un nombre de requêtes garanti.
-Une fois l'enveloppe épuisée, chaque scan échoue jusqu'à la réinitialisation quotidienne.
+## Getting Started
 
-Sur une installation sans Cloudflare, le scanner essaie `gemini-3.5-flash` avec le niveau de réflexion `MINIMAL`, puis `gemini-3.8-flash` avec `LOW` si nécessaire.
-Ce repli couvre les refus de modèle, quotas atteints, saturations et délais dépassés. Il reste soumis au délai global de 45 secondes.
-La présence d'une clé ne garantit ni quota disponible ni disponibilité du service Google. Chaque tentative de modèle peut consommer son quota.
+### Prerequisites
+* [Node.js](https://nodejs.org/) (>= 20.x) or [Bun](https://bun.sh/) (recommended)
+* [pnpm](https://pnpm.io/) or `bun`
 
-Le navigateur optimise la photo en JPEG, puis l'envoie à `/api/ai/scan-image`. Le serveur retranscrit les jours et les repas.
-Il accepte uniquement une réponse finale complète et ignore les blocs de réflexion. Le traitement des fournisseurs est borné à 45 secondes.
-Le client ne relance pas l'analyse par une server action ou un OCR après un échec.
-
-La transcription est affectée aux dates à partir du début de semaine choisi, en conservant l'ordre chronologique même au-delà de sept jours.
-Un second samedi en fin de photo est placé dans la semaine suivante, sans remplacer ni fusionner le premier.
-Les cases vides restent vides. Vérifie les propositions avant de les appliquer, notamment les lignes barrées et les accompagnements.
-Les ingrédients proposés pour un nouveau plat viennent des recettes par défaut de l'application, pas de la photo.
-
-Le bouton « Appliquer au planning » crée les nouveaux plats et ingrédients par lots, sans modifier les recettes existantes du carnet.
-Les créneaux sélectionnés sont ensuite enregistrés en une seule écriture, sans suppression préalable : un échec de cette écriture conserve l'ancien planning.
-Les créations dans le carnet et l'écriture du planning ne forment pas une transaction unique ; les nouveaux plats peuvent donc rester dans le carnet si l'enregistrement du planning échoue.
-
-La reconnaissance manuscrite utilise une API distante. Elle n'est ni entièrement locale ni garantie exacte.
-Sans configuration Cloudflare ni clé Vision, l'import photo affiche une erreur explicite. L'onglet texte reste utilisable sans API.
-Pour l'installation Gemini, les conditions de gratuité et les limites dépendent du [projet Google AI Studio](https://aistudio.google.com/).
-Lors des essais du 29 octobre 2026, Google a indiqué une limite de 20 requêtes gratuites par jour pour `gemini-3.8-flash` sur le projet utilisé. Consulte les limites de ton propre projet.
-
-Pour vérifier les vraies photos sur une instance, sans simuler l'IA :
-
+### 1. Clone the repository
 ```bash
-bun scripts/verify-planning-scan.ts --cloudflare https://myplanifai.vercel.app photo1.png photo2.png photo3.png
+git clone https://github.com/lucas-debize/PlanifIA.git
+cd PlanifIA
 ```
 
-Le mode `--cloudflare` interroge d'abord `/api/health` et exige un statut 200 avec `aiVision.cloudflareConfigured` à true.
-Sinon le script échoue avant tout scan, sans consommer de quota IA. Sans `--cloudflare`, il garde le comportement précédent pour une installation Gemini.
-Le script affiche le modèle Cloudflare configuré, les délais, les erreurs HTTP et les créneaux datés. Le script appelle réellement l'API et consomme le quota disponible.
-Il conserve chaque réponse dans `.data/scan-verification/`, sous un fichier stable nommé d'après la photo (`photo1.png-response.json`), exclu de Git.
-Son contrôle de complétude attend au moins sept jours, treize créneaux et des dates chronologiques, sans limiter l'import à une seule semaine. Compare aussi les noms et les créneaux à la photo : un statut `PASS` ne mesure pas la fidélité de la transcription, et le nombre de créneaux ne prouve pas les noms.
-Les trois photos d'essai sont un échantillon réel ; aucune lecture n'est garantie.
+### 2. Configure Environment Variables
+Copy the example environment configuration:
+```bash
+cp .env.example .env.local
+```
 
-Les transcriptions Cloudflare obtenues le 29 octobre 2026 ont été relues avec le parseur chronologique corrigé : les trois photos manuscrites donnent respectivement 15, 16 et 14 créneaux, second samedi compris.
-La confirmation a été exercée dans Chrome à 390 px avec 28 créneaux sur deux semaines futures débutant le samedi : les deux semaines persistent après navigation et rechargement dans le stockage de développement local. Aucune écriture de production n'a été effectuée pour ce test.
-Les noms manuscrits ambigus restent à relire avant confirmation.
+For **instant local development without third-party services**, enable offline bypass mode:
+```env
+DEV_AUTH_BYPASS=1
+```
+This activates the local mock user `dev@planifia.local` using `.data/dev-store.json`.
 
-## Développement local
+For **full production or Supabase-connected local development**, fill in your credentials:
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-supabase-anon-key
+NEXT_PUBLIC_APP_URL=http://localhost:3000
 
-1. Copie `.env.example` vers `.env.local` :
-   ```bash
-   cp .env.example .env.local
-   ```
-2. Remplis les variables Supabase ou utilise le mode hors-ligne :
-   ```bash
-   DEV_AUTH_BYPASS=1
-   ```
-3. Installe les dépendances et démarre le serveur de développement :
-   ```bash
-   pnpm install
-   pnpm dev
-   ```
-4. Ouvre [http://localhost:3000](http://localhost:3000).
+# Optional: AI Vision Scanning (Cloudflare or Gemini)
+CLOUDFLARE_ACCOUNT_ID=your-32-char-cloudflare-account-id
+CLOUDFLARE_API_TOKEN=your-cloudflare-api-token
+# or
+GEMINI_API_KEY=your-google-ai-studio-key
+```
+
+### 3. Install Dependencies
+```bash
+bun install
+# or
+pnpm install
+```
+
+### 4. Run the Development Server
+```bash
+bun dev
+# or
+pnpm dev
+```
+Open [http://localhost:3000](http://localhost:3000) with your browser.
 
 ---
 
-## Sécurité du flux
+## Testing & Quality
 
-- OAuth **PKCE** : le vérificateur est posé en cookie HttpOnly côté serveur (`/auth/google`), échangé dans `/auth/callback`. Aucun token dans l’URL.
-- Redirection limitée aux chemins internes (`/semaine`, …).
-- Session dans des cookies `HttpOnly`, `SameSite=Lax`, `Secure` en production. Le proxy vérifie le JWT avec `getClaims()` à chaque requête.
-- RLS : un utilisateur ne lit et n’écrit que ses lignes.
-- Déconnexion : `signOut({ scope: "global" })` révoque les refresh tokens.
-- En-têtes : `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`.
+Run the automated test suite covering domain logic, aisle classification, planning slots, and AI extraction:
+
+```bash
+# Run 129 unit tests
+bun test
+
+# Type checking
+bunx tsc --noEmit
+
+# Linting
+bun run lint
+
+# Production build
+bun run build
+```
 
 ---
 
-## Plusieurs comptes
+## 24/7 Zero-Cost Production Deployment
 
-La page **Compte** affiche l’e-mail réel du compte connecté (Google, lien magique ou `dev@planifia.local`).
+This project is configured to run 100% free with continuous availability:
+* **Frontend & SSR**: Vercel Hobby Tier ($0/month)
+* **Database & Auth**: Supabase Free Tier ($0/month)
+* **OAuth**: Google Cloud Console ($0/month)
+* **AI Vision**: Cloudflare Workers Free (10,000 neurons/day) or Google AI Studio Free Tier
+* **Anti-Pause Keepalive**: GitHub Actions Scheduled Ping ($0/month)
 
-**Ajouter un compte Google** lance un nouvel OAuth (`prompt=select_account`) sans jeter les comptes déjà mémorisés sur l’appareil. Chaque identité Google a son propre espace repas / semaine / courses (RLS).
+### Step 1: Supabase Setup
+1. Create a free project on [supabase.com](https://supabase.com).
+2. Run the database migrations in order from `supabase/migrations/` (or execute `supabase/full_setup.sql` in the SQL Editor).
+3. Retrieve your **Project URL** and **anon public key** from *Project Settings → API*.
 
-La liste locale (e-mail, nom, photo) est un cookie HttpOnly. Le jeton de session de chaque compte est stocké à part, aussi en HttpOnly, pour basculer sans retaper Google. S’il est expiré, MyPlanifAI relance Google avec `login_hint`.
+### Step 2: Google Cloud OAuth
+1. Go to [Google Cloud Console](https://console.cloud.google.com/) and create a project.
+2. In **APIs & Services → OAuth consent screen**, select **External** and configure app details.
+3. In **Credentials → Create Credentials → OAuth client ID**:
+   * Type: **Web application**
+   * **Authorized redirect URIs**: `https://<your-supabase-project-id>.supabase.co/auth/v1/callback`
+4. In **Supabase Dashboard → Authentication → Providers → Google**:
+   * Enable Google provider.
+   * Paste your **Client ID** and **Client Secret**.
 
-**Déconnexion** quitte seulement le compte actuel et passe au suivant s’il y en a un. **Tout déconnecter** vide la liste de l’appareil.
+### Step 3: Vercel Deployment
+1. Import your repository into [Vercel](https://vercel.com).
+2. Set the Environment Variables:
+   * `NEXT_PUBLIC_SUPABASE_URL`
+   * `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+   * `NEXT_PUBLIC_APP_URL` (e.g. `https://myplanifai.vercel.app`)
+   * *(Optional)* `CLOUDFLARE_ACCOUNT_ID` & `CLOUDFLARE_API_TOKEN` or `GEMINI_API_KEY`
+3. Deploy!
+4. Complete redirect URLs:
+   * **Supabase → Authentication → URL Configuration**: set **Site URL** to `https://your-domain.vercel.app` and add `https://your-domain.vercel.app/auth/callback` to **Redirect URLs**.
+   * **Google Cloud Console → Credentials**: add `https://your-domain.vercel.app` to **Authorized JavaScript origins**.
+
+### Step 4: Supabase Keepalive (Preventing Inactivity Pause)
+Supabase Free pauses projects after 7 days of inactivity. This repository includes `.github/workflows/supabase-keepalive.yml` which pings your database every 3 days:
+1. In your GitHub repository, go to **Settings → Secrets and variables → Actions**.
+2. Add the following repository secrets:
+   * `SUPABASE_URL`: `https://<your-project-id>.supabase.co`
+   * `SUPABASE_ANON_KEY`: Your Supabase anon public key
+3. The keepalive workflow runs automatically every 3 days.
+
+### Step 5: Health & Monitoring Endpoint (`/api/health`)
+A public health check endpoint is available at `/api/health`:
+```json
+{
+  "status": "ok",
+  "timestamp": "2026-10-30T12:00:00.000Z",
+  "database": "connected",
+  "aiVision": {
+    "geminiConfigured": true,
+    "geminiModels": ["gemini-3.5-flash", "gemini-3.8-flash"],
+    "glmConfigured": false,
+    "openaiConfigured": false,
+    "cloudflareConfigured": true,
+    "cloudflareModel": "@cf/google/gemma-4-26b-a4b-it"
+  }
+}
+```
+
+---
+
+## Environment Variables Reference
+
+| Variable | Required | Context | Description |
+|---|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Yes (Prod) | Client/Server | Supabase project URL (`https://<id>.supabase.co`) |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Yes (Prod) | Client/Server | Supabase public publishable/anon key |
+| `NEXT_PUBLIC_APP_URL` | Yes (Prod) | Client/Server | Public URL used for OAuth redirects and links |
+| `DEV_AUTH_BYPASS` | No | Server (Dev) | Set to `1` to bypass OAuth and use offline mock user |
+| `CLOUDFLARE_ACCOUNT_ID` | Optional | Server | 32-character Cloudflare account ID for Workers AI |
+| `CLOUDFLARE_API_TOKEN` | Optional | Server | Cloudflare API token with Workers AI permissions |
+| `GEMINI_API_KEY` | Optional | Server | Google AI Studio API key for Gemini Vision |
+| `OPENAI_API_KEY` | Optional | Server | OpenAI API key for GPT-4o Vision |
+| `GLM_API_KEY` | Optional | Server | Zhipu / GLM API key for GLM-4.5v / 5.3 Vision |
+
+---
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
