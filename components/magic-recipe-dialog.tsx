@@ -45,15 +45,25 @@ import { optimizeImageForOcr } from "@/lib/images/optimize"
 import { cn } from "@/lib/utils"
 
 export function MagicRecipeDialog({
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
   onRecipeExtracted,
   onBatchImported,
   trigger,
 }: {
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
   onRecipeExtracted?: (recipe: ExtractedRecipe) => void
   onBatchImported?: (meals: MealWithIngredients[]) => void
   trigger?: React.ReactNode
 }) {
-  const [open, setOpen] = useState(false)
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
+  const isControlled = controlledOpen !== undefined
+  const open = isControlled ? controlledOpen : uncontrolledOpen
+  const setOpen = (next: boolean) => {
+    if (!isControlled) setUncontrolledOpen(next)
+    controlledOnOpenChange?.(next)
+  }
   const [tab, setTab] = useState<"text" | "photo">("text")
   const [textContent, setTextContent] = useState("")
   // Photo state
@@ -129,7 +139,7 @@ export function MagicRecipeDialog({
           setSelectedIndices(new Set(result.result.meals.map((_, i) => i)))
           setExpandedIndices(new Set())
           toast.success(
-            `Planning détecté : ${result.result.meals.length} plat${result.result.meals.length > 1 ? "s" : ""} identifié${result.result.meals.length > 1 ? "s" : ""}`
+            `${result.result.meals.length} plat${result.result.meals.length > 1 ? "s" : ""} identifié${result.result.meals.length > 1 ? "s" : ""}`
           )
         } catch (err) {
           toast.error(actionErrorMessage(err))
@@ -142,7 +152,7 @@ export function MagicRecipeDialog({
 
     const content = textContent.trim()
     if (!content) {
-      toast.error("Veuillez coller ou dicter vos repas de la semaine.")
+      toast.error("Veuillez saisir vos idées de repas ou coller votre liste.")
       return
     }
 
@@ -157,7 +167,7 @@ export function MagicRecipeDialog({
         setSelectedIndices(new Set(batch.meals.map((_, i) => i)))
         setExpandedIndices(new Set())
         toast.success(
-          `Planning détecté : ${batch.meals.length} plat${batch.meals.length > 1 ? "s" : ""} identifié${batch.meals.length > 1 ? "s" : ""}`
+          `${batch.meals.length} plat${batch.meals.length > 1 ? "s" : ""} identifié${batch.meals.length > 1 ? "s" : ""}`
         )
       } catch (err) {
         toast.error(actionErrorMessage(err))
@@ -309,8 +319,10 @@ export function MagicRecipeDialog({
         if (!next) resetAll()
       }}
     >
-      <DialogTrigger asChild>
-        {trigger ?? (
+      {trigger ? (
+        <DialogTrigger asChild>{trigger}</DialogTrigger>
+      ) : !isControlled ? (
+        <DialogTrigger asChild>
           <Button
             type="button"
             variant="outline"
@@ -318,10 +330,10 @@ export function MagicRecipeDialog({
             className="tap-press min-h-10 gap-1.5 rounded-xl border-primary/30 bg-primary/10 text-xs font-semibold text-primary hover:bg-primary/20 shadow-2xs transition-all sm:min-h-11 sm:text-sm"
           >
             <Sparkles className="size-4 text-primary" />
-            <span>Import planning IA</span>
+            <span>Import magique</span>
           </Button>
-        )}
-      </DialogTrigger>
+        </DialogTrigger>
+      ) : null}
 
       <DialogContent
         className={cn(
@@ -337,13 +349,13 @@ export function MagicRecipeDialog({
             <div>
               <DialogTitle className="font-fraunces text-lg">
                 {previewBatch
-                  ? `Planning détecté · ${previewBatch.meals.length} plat${previewBatch.meals.length > 1 ? "s" : ""} identifié${previewBatch.meals.length > 1 ? "s" : ""}`
-                  : "Import d'un planning de repas"}
+                  ? `${previewBatch.meals.length} plat${previewBatch.meals.length > 1 ? "s" : ""} identifié${previewBatch.meals.length > 1 ? "s" : ""}`
+                  : "Import magique de plats & idées"}
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground">
                 {previewBatch
-                  ? "Une recette par défaut a été automatiquement attribuée à chaque plat. Ajustez les ingrédients avant d'importer."
-                  : "Photographiez ou collez votre semainier pour extraire tous les plats et les ajouter en bloc à vos idées."}
+                  ? "Une recette ou des ingrédients par défaut ont été attribués. Ajustez-les avant d'importer."
+                  : "Photographiez ou collez une liste de plats, des idées en vrac, une recette ou un planning complet."}
               </DialogDescription>
             </div>
           </div>
@@ -387,7 +399,7 @@ export function MagicRecipeDialog({
                 <Textarea
                   value={textContent}
                   onChange={(e) => setTextContent(e.target.value)}
-                  placeholder={`Collez ou dictez vos repas de la semaine...\n\nExemple :\nSamedi : Haricot vert / Poisson\n- Panini\nDimanche : Steak patate\n- Nems / Riz cantonais\nLundi : Reste\n- Tartiflette\nMardi : Steak frites...`}
+                  placeholder={`Collez ou dictez vos idées de repas (un planning, une liste de plats ou une recette)...\n\nExemples :\n• Liste d'idées de plats :\nLasagnes maison\nSalade de chèvre chaud\nQuiche aux poireaux\n\n• Planning :\nLundi midi : Poisson riz\nMardi soir : Pizza\n\n• Plats séparés par des virgules :\nPoulet rôti, Risotto, Tarte fine aux pommes`}
                   rows={7}
                   className="resize-none font-sans text-xs"
                   disabled={isPending}
@@ -536,14 +548,14 @@ export function MagicRecipeDialog({
                     <span>
                       {tab === "photo"
                         ? scanStatus || "Lecture de la photo..."
-                        : "Extraction du planning..."}
+                        : "Extraction des plats..."}
                     </span>
                   </>
                 ) : (
                   <>
                     <Sparkles className="size-4" />
                     <span>
-                      {tab === "photo" ? "Scanner le planning" : "Extraire les plats"}
+                      {tab === "photo" ? "Analyser la photo" : "Extraire les idées"}
                     </span>
                   </>
                 )}

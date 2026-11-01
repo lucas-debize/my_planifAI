@@ -25,7 +25,7 @@ export default async function SemainePage({
     redirect(`/semaine/${currentWeekStartIso(new Date(), startDay)}`)
   }
   const dayOfWeek = parsed.getDay()
-  if (dayOfWeek !== (startDay === 6 ? 6 : 1)) {
+  if (dayOfWeek !== startDay) {
     const adjusted = weekStartOf(parsed, startDay)
     redirect(`/semaine/${toISODate(adjusted)}`)
   }

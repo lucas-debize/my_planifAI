@@ -25,7 +25,7 @@ function runScenario(
     const { createDevClient } = await import(${source("../lib/dev/client.ts")})
     const { withStore } = await import(${source("../lib/dev/store.ts")})
     const { createMeals, getMeal, listMeals } = await import(${source("../lib/domain/meals.ts")})
-    const { setMultipleSlots, getWeekSlots } = await import(${source("../lib/domain/slots.ts")})
+    const { clearWeekSlots, setMultipleSlots, getWeekSlots } = await import(${source("../lib/domain/slots.ts")})
     const { listWeekIngredients } = await import(${source("../lib/domain/shopping.ts")})
     const { createClient } = await import(${sdkPath})
     const { mock } = await import("bun:test")
@@ -391,5 +391,29 @@ describe("Application groupée du planning", () => {
       }
       return { rejected, unchanged: before === await snapshot() }
     `)).toEqual({ rejected: [true, true, true, true, true, true, true, true], unchanged: true })
+  })
+
+  it("supprime tous les repas d'une semaine sans impacter les autres semaines", () => {
+    expect(runScenario(`
+      const [meal1, meal2] = await createMeals(client, personal, [
+        { name: "Plat Semaine 1", ingredientNames: [] },
+        { name: "Plat Semaine 2", ingredientNames: [] },
+      ])
+      await setMultipleSlots(client, personal, [
+        { date: "2026-10-26", kind: "dejeuner", mealId: meal1.id },
+        { date: "2026-10-27", kind: "diner", mealId: meal1.id },
+        { date: "2026-11-02", kind: "dejeuner", mealId: meal2.id },
+      ])
+
+      const deleted = await clearWeekSlots(client, personal, "2026-10-26")
+      const week1Slots = await getWeekSlots(client, personal, "2026-10-26")
+      const week2Slots = await getWeekSlots(client, personal, "2026-11-02")
+
+      return {
+        deleted,
+        week1Count: week1Slots.filter((s) => s.meal !== null).length,
+        week2Count: week2Slots.filter((s) => s.meal !== null).length,
+      }
+    `)).toEqual({ deleted: 2, week1Count: 0, week2Count: 1 })
   })
 })

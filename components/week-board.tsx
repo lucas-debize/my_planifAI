@@ -3,7 +3,7 @@
 import { useOptimistic, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { CalendarDays, FileDown, MoreHorizontal, Sparkles } from "lucide-react"
+import { CalendarDays, Check, FileDown, MoreHorizontal, Sparkles, Trash2 } from "lucide-react"
 import { MealPicker } from "@/components/meal-picker"
 import { MagicPlanDialog } from "@/components/magic-plan-dialog"
 import { Button } from "@/components/ui/button"
@@ -16,12 +16,30 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { setWeekStartDayAction } from "@/lib/actions/session"
 import {
   setSlot,
   assignPersonalMealToSlot,
   assignFamilyMealToSlot,
   assignResteToSlot,
+  clearWeekSlotsAction,
 } from "@/lib/actions/slots"
 import { actionErrorMessage } from "@/lib/errors"
 import {
@@ -31,7 +49,10 @@ import {
   toISODate,
   weekDays,
   weekLabel,
+  WEEK_DAY_OPTIONS,
+  WEEK_DAY_LABELS,
 } from "@/lib/dates"
+import type { WeekStartDay } from "@/lib/domain/session"
 import { SLOT_LABEL, SLOTS, type SlotKind } from "@/lib/week"
 import type { MealWithIngredients } from "@/lib/domain/meals"
 import type { WeekSlot } from "@/lib/domain/slots"
@@ -97,6 +118,38 @@ export function WeekBoard({
   const [picker, setPicker] = useState<PickerTarget | null>(null)
   const [flash, setFlash] = useState<string | null>(null)
   const [magicPlanOpen, setMagicPlanOpen] = useState(false)
+  const [weekStartDialogOpen, setWeekStartDialogOpen] = useState(false)
+  const [isChangingStartDay, setIsChangingStartDay] = useState(false)
+  const [confirmClearOpen, setConfirmClearOpen] = useState(false)
+  const [isClearing, setIsClearing] = useState(false)
+
+  const currentWeekDate = parseISODate(weekStart)
+  const currentWeekDays = currentWeekDate ? weekDays(currentWeekDate).map(toISODate) : []
+
+  async function handleConfirmClearWeek() {
+    setIsClearing(true)
+    try {
+      startTransition(() => {
+        for (const d of currentWeekDays) {
+          for (const k of SLOTS) {
+            setSlotsOptimistic({ date: d, kind: k, meal: null })
+          }
+        }
+      })
+      const result = await clearWeekSlotsAction(weekStart)
+      toast.success(
+        result.deletedCount > 0
+          ? `${result.deletedCount} repas retiré${result.deletedCount > 1 ? "s" : ""} de la semaine`
+          : "La semaine a été vidée"
+      )
+      setConfirmClearOpen(false)
+      router.refresh()
+    } catch (err) {
+      toast.error(actionErrorMessage(err))
+    } finally {
+      setIsClearing(false)
+    }
+  }
   function slotFor(date: string, kind: SlotKind) {
     return (
       slots.find((slot) => slot.slot_date === date && slot.slot_kind === kind) ??
@@ -145,24 +198,19 @@ export function WeekBoard({
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer"
-                onClick={async () => {
-                  const currentDay = parseISODate(weekStart)?.getDay()
-                  const nextDay: 1 | 6 = currentDay === 6 ? 1 : 6
-                  await setWeekStartDayAction(nextDay)
-                  toast.success(
-                    nextDay === 6
-                      ? "La semaine commence désormais le samedi matin"
-                      : "La semaine commence désormais le lundi matin"
-                  )
-                  router.push("/semaine")
-                }}
+                onClick={() => setWeekStartDialogOpen(true)}
               >
                 <CalendarDays className="size-4 text-primary" />
                 <span>
-                  {parseISODate(weekStart)?.getDay() === 6
-                    ? "Semaine débutant le Lundi"
-                    : "Semaine débutant le Samedi"}
+                  Début de semaine ({WEEK_DAY_LABELS[(currentWeekDate?.getDay() ?? 1) as WeekStartDay] ?? "Lundi"})
                 </span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium text-destructive cursor-pointer hover:bg-destructive/10 focus:bg-destructive/10 focus:text-destructive"
+                onClick={() => setConfirmClearOpen(true)}
+              >
+                <Trash2 className="size-4 text-destructive" />
+                <span>Vider la semaine</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -374,6 +422,84 @@ export function WeekBoard({
           })
         }}
       />
+
+      {/* Dialogue de choix du premier jour de la semaine */}
+      <Dialog open={weekStartDialogOpen} onOpenChange={setWeekStartDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-fraunces text-lg">
+              Commencement de la semaine
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Choisissez le jour où démarre votre semainier.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-1 gap-1.5 py-2">
+            {WEEK_DAY_OPTIONS.map((opt) => {
+              const currentDayOfWeek = parseISODate(weekStart)?.getDay()
+              const isSelected = currentDayOfWeek === opt.day
+              return (
+                <button
+                  key={opt.day}
+                  type="button"
+                  disabled={isChangingStartDay}
+                  onClick={async () => {
+                    if (isSelected) {
+                      setWeekStartDialogOpen(false)
+                      return
+                    }
+                    setIsChangingStartDay(true)
+                    try {
+                      await setWeekStartDayAction(opt.day)
+                      toast.success(`La semaine commence désormais le ${opt.label.toLowerCase()} matin`)
+                      setWeekStartDialogOpen(false)
+                      router.push("/semaine")
+                    } catch (err) {
+                      toast.error(actionErrorMessage(err))
+                    } finally {
+                      setIsChangingStartDay(false)
+                    }
+                  }}
+                  className={cn(
+                    "flex items-center justify-between rounded-xl px-3.5 py-2.5 text-sm font-medium transition-all tap-press",
+                    isSelected
+                      ? "bg-primary/10 text-primary font-semibold border border-primary/30"
+                      : "bg-surface hover:bg-muted text-ink border border-line/60"
+                  )}
+                >
+                  <span>{opt.label}</span>
+                  {isSelected ? <Check className="size-4 text-primary" /> : null}
+                </button>
+              )
+            })}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialogue de confirmation de suppression de la semaine */}
+      <AlertDialog open={confirmClearOpen} onOpenChange={setConfirmClearOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-fraunces">
+              Vider tous les plats de la semaine ?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-xs sm:text-sm text-muted-foreground">
+              Cette action supprimera tous les plats planifiés pour cette semaine (
+              {currentWeekDate ? weekLabel(currentWeekDate) : ""}). Les ingrédients associés seront également retirés de votre liste de courses.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isClearing}>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmClearWeek}
+              disabled={isClearing}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isClearing ? "Suppression..." : "Vider la semaine"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }

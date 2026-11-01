@@ -1157,7 +1157,35 @@ export function extractMealsFromText(
     }
   }
 
-  // Heuristique 3 : Liste à puces ou numérotée de plats sans en-tête d'ingrédients
+  // Heuristique 2.5 : Ligne unique avec plusieurs plats séparés par des virgules
+  if (lines.length === 1 && lines[0].includes(",")) {
+    const commaParts = lines[0].split(/[,;]+/).map((p) => p.trim()).filter((p) => p.length >= 2)
+    const hasAnyQty = commaParts.some((p) => extractIngredientQuantity(p) !== undefined)
+    if (!hasAnyQty && commaParts.length >= 2) {
+      const meals: ExtractedRecipe[] = []
+      const seenTitles = new Set<string>()
+      for (const part of commaParts) {
+        const dishName = cleanDishName(part)
+        if (dishName.length < 2) continue
+        const norm = normalizeName(dishName)
+        if (seenTitles.has(norm)) continue
+        seenTitles.add(norm)
+        const defaultIngs = getDefaultRecipeForDish(dishName)
+        meals.push({
+          title: dishName,
+          ingredients: defaultIngs.map((i) => i.name),
+          detailedIngredients: defaultIngs,
+          isDefaultRecipe: true,
+          source: source ?? "text",
+        })
+      }
+      if (meals.length >= 2) {
+        return { kind: "list", meals, source: source ?? "text" }
+      }
+    }
+  }
+
+  // Heuristique 3 : Liste à puces, numérotée ou simple liste de plats sans en-tête d'ingrédients
   const hasIngredientHeader = lines.some((l) => /^ingr[eé]dients?\b/i.test(l.trim()))
   if (!hasIngredientHeader) {
     const nonInstructionLines = lines.filter((l) => {
@@ -1180,18 +1208,21 @@ export function extractMealsFromText(
       nonInstructionLines.length >= 2 &&
       nonInstructionLines.every((l) => /^[-*•+–—\d.)\]]/.test(l.trim()))
 
+    let qtyCount = 0
+    for (const line of nonInstructionLines) {
+      if (extractIngredientQuantity(line) !== undefined) {
+        qtyCount++
+      }
+    }
+    const hasFewOrNoQuantities =
+      nonInstructionLines.length > 0 &&
+      (qtyCount === 0 || qtyCount / nonInstructionLines.length < 0.25)
+
     if (
       !hasCommaIngredientsLine &&
-      (allHaveBullets || nonInstructionLines.length >= 3)
+      hasFewOrNoQuantities &&
+      (allHaveBullets || nonInstructionLines.length >= 2)
     ) {
-      let qtyCount = 0
-      for (const line of nonInstructionLines) {
-        if (extractIngredientQuantity(line) !== undefined) {
-          qtyCount++
-        }
-      }
-
-      if (qtyCount / nonInstructionLines.length < 0.35) {
         const meals: ExtractedRecipe[] = []
         const seenTitles = new Set<string>()
 
@@ -1219,7 +1250,6 @@ export function extractMealsFromText(
             source: source ?? "text",
           }
         }
-      }
     }
   }
 

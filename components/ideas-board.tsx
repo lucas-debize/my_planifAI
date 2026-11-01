@@ -58,6 +58,7 @@ export function IdeasBoard({
   const router = useRouter()
   const [query, setQuery] = useState("")
   const [importOpen, setImportOpen] = useState(false)
+  const [magicOpen, setMagicOpen] = useState(false)
   const [selectedMealIds, setSelectedMealIds] = useState<Set<string>>(new Set())
   const [isImporting, startImportTransition] = useTransition()
   const [mealToDelete, setMealToDelete] = useState<MealWithIngredients | null>(null)
@@ -139,39 +140,38 @@ export function IdeasBoard({
         title="Idées"
         actions={
           <div className="flex items-center gap-1.5 shrink-0">
-            <Button asChild size="sm" className="tap-press min-h-10 gap-1.5 rounded-xl text-xs font-semibold shadow-2xs transition-all sm:min-h-11 sm:text-sm">
-              <Link href="/idees/nouvelle">
-                <Plus className="size-4" />
-                <span className="hidden sm:inline">Nouvelle idée</span>
-              </Link>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setMagicOpen(true)}
+              className="tap-press min-h-10 gap-1.5 rounded-xl border-primary/30 bg-primary/10 text-xs font-semibold text-primary hover:bg-primary/20 shadow-2xs transition-all sm:min-h-11 sm:text-sm"
+            >
+              <Sparkles className="size-4 text-primary" />
+              <span>Import magique</span>
             </Button>
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="tap-press min-h-10 px-2.5 gap-1 rounded-xl border-line bg-surface text-xs font-semibold shadow-2xs hover:bg-muted"
-                  aria-label="Options d'importation"
-                >
-                  <MoreHorizontal className="size-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64 p-1.5 rounded-xl shadow-lg border border-line bg-surface">
-                <MagicRecipeDialog
-                  onBatchImported={() => router.refresh()}
-                  trigger={
-                    <DropdownMenuItem
-                      onSelect={(e) => e.preventDefault()}
-                      className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer"
-                    >
-                      <Sparkles className="size-4 text-primary" />
-                      <span>Importer un planning (photo / texte)</span>
-                    </DropdownMenuItem>
-                  }
-                />
-                {importableMeals.length > 0 ? (
+            {importableMeals.length > 0 ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="tap-press min-h-10 px-2.5 gap-1 rounded-xl border-line bg-surface text-xs font-semibold shadow-2xs hover:bg-muted"
+                    aria-label="Options d'importation"
+                  >
+                    <MoreHorizontal className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64 p-1.5 rounded-xl shadow-lg border border-line bg-surface">
+                  <DropdownMenuItem
+                    onClick={() => setMagicOpen(true)}
+                    className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer"
+                  >
+                    <Sparkles className="size-4 text-primary" />
+                    <span>Import magique (photo, texte, liste)</span>
+                  </DropdownMenuItem>
                   <DropdownMenuItem
                     onClick={() => {
                       setSelectedMealIds(new Set(importableMeals.map((m) => m.id)))
@@ -186,9 +186,9 @@ export function IdeasBoard({
                         : "Importer les recettes du groupe"}
                     </span>
                   </DropdownMenuItem>
-                ) : null}
-              </DropdownMenuContent>
-            </DropdownMenu>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : null}
           </div>
         }
       />
@@ -210,25 +210,39 @@ export function IdeasBoard({
           </span>
         </div>
 
-        <div className="relative">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
-          <Input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Rechercher un plat ou un ingrédient..."
-            aria-label="Rechercher un plat ou un ingrédient"
-            className="pl-10 pr-9 min-h-11 rounded-xl border-line/80 bg-surface shadow-2xs focus-visible:ring-primary/30"
-          />
-          {query ? (
-            <button
-              type="button"
-              onClick={() => setQuery("")}
-              className="tap-press absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-ink"
-              aria-label="Effacer la recherche"
-            >
-              <X className="size-4" />
-            </button>
-          ) : null}
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
+            <Input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Rechercher un plat ou un ingrédient..."
+              aria-label="Rechercher un plat ou un ingrédient"
+              className="pl-10 pr-9 min-h-11 rounded-xl border-line/80 bg-surface shadow-2xs focus-visible:ring-primary/30"
+            />
+            {query ? (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                className="tap-press absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-ink"
+                aria-label="Effacer la recherche"
+              >
+                <X className="size-4" />
+              </button>
+            ) : null}
+          </div>
+
+          <Button
+            asChild
+            size="sm"
+            className="tap-press min-h-11 gap-1.5 rounded-xl px-3 sm:px-4 text-xs font-semibold shadow-2xs transition-all shrink-0"
+          >
+            <Link href="/idees/nouvelle">
+              <Plus className="size-4" />
+              <span className="hidden sm:inline">Ajouter une idée</span>
+              <span className="sm:hidden">Ajouter</span>
+            </Link>
+          </Button>
         </div>
       </div>
 
@@ -388,6 +402,13 @@ export function IdeasBoard({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Dialogue d'import magique */}
+      <MagicRecipeDialog
+        open={magicOpen}
+        onOpenChange={setMagicOpen}
+        onBatchImported={() => router.refresh()}
+      />
     </>
   )
 }

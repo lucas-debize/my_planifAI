@@ -1,6 +1,7 @@
 "use client"
 
 import { useRef, useState, useTransition } from "react"
+import { addDays } from "date-fns"
 import {
   Camera,
   Check,
@@ -26,7 +27,8 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { parseISODate, slotTitleDate } from "@/lib/dates"
+import { currentWeekStartIso, isPastDay, parseISODate, slotTitleDate } from "@/lib/dates"
+import type { WeekStartDay } from "@/lib/domain/session"
 import { SLOT_LABEL, type SlotKind } from "@/lib/week"
 import {
   generateWeekPlanProposal,
@@ -109,7 +111,14 @@ function MagicPlanModalContent({
   const [textInput, setTextInput] = useState("")
   const [isAnalyzing, startAnalyzeTransition] = useTransition()
   const [detectedSlots, setDetectedSlots] = useState<
-    { date: string; kind: SlotKind; mealName: string; selected: boolean }[]
+    {
+      date: string
+      kind: SlotKind
+      mealName: string
+      selected: boolean
+      isPast?: boolean
+      hasExistingMeal?: boolean
+    }[]
   >([])
   const [extractedBatchMeals, setExtractedBatchMeals] = useState<ExtractedRecipe[]>([])
   const [scanStatus, setScanStatus] = useState<string | null>(null)
@@ -118,7 +127,17 @@ function MagicPlanModalContent({
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const emptySlotsCount = slots.filter((s) => s.meal === null).length
-  const effectiveWeekStart = weekStart ?? slots[0]?.slot_date ?? ""
+  const baseWeekStart = weekStart ?? slots[0]?.slot_date ?? ""
+  const baseWeekDate = parseISODate(baseWeekStart)
+  // Une semaine est entièrement passée si son dernier jour (baseWeekDate + 6 jours) est antérieur à aujourd'hui
+  const isEntireWeekPast = Boolean(
+    baseWeekDate && isPastDay(addDays(baseWeekDate, 6))
+  )
+  const currentStartDay = (baseWeekDate?.getDay() ?? 1) as WeekStartDay
+  const effectiveWeekStart = isEntireWeekPast
+    ? currentWeekStartIso(new Date(), currentStartDay)
+    : baseWeekStart
+
   const selectedScanSlots = detectedSlots.filter((slot) => slot.selected && slot.mealName.trim())
   const firstScanDate = selectedScanSlots[0] ? parseISODate(selectedScanSlots[0].date) : null
   const lastScanSlot = selectedScanSlots.at(-1)
@@ -147,6 +166,7 @@ function MagicPlanModalContent({
       currentMealName: target.meal.name,
       proposals,
       catalogMeals: meals,
+      existingSlots: slots,
       options: {
         mode: "balanced",
         onlyCatalog,
@@ -155,7 +175,11 @@ function MagicPlanModalContent({
     })
 
     if (!replacement) {
-      toast.info("Aucune autre alternative disponible pour ce créneau.")
+      toast.info(
+        onlyCatalog
+          ? "Aucun autre plat disponible dans votre carnet pour ce créneau."
+          : "Aucune autre alternative disponible pour ce créneau."
+      )
       return
     }
 
@@ -167,6 +191,7 @@ function MagicPlanModalContent({
       }
       return next
     })
+    toast.success(`Créneau remplacé : « ${replacement.name} »`)
   }
 
   function handleApplyGenerator() {
@@ -246,18 +271,36 @@ function MagicPlanModalContent({
   }
 
   function processTranscribedText(text: string) {
+    if (isEntireWeekPast) {
+      toast.info(
+        "Cette semaine étant déjà terminée, le planning scanné a été attribué à la semaine actuelle.",
+        { duration: 4000 }
+      )
+    }
+
     const parsedSlots = parsePlanningToWeekSlots(text, effectiveWeekStart)
     const batch = extractMealsFromText(text, "image")
     setExtractedBatchMeals(batch.meals)
 
     if (parsedSlots.length > 0) {
       setDetectedSlots(
-        parsedSlots.map((s) => ({
-          date: s.date,
-          kind: s.kind,
-          mealName: s.mealName,
-          selected: true,
-        }))
+        parsedSlots.map((s) => {
+          const sDate = parseISODate(s.date)
+          const isPast = sDate ? isPastDay(sDate) : false
+          const existing = slots.find(
+            (slot) => slot.slot_date === s.date && slot.slot_kind === s.kind
+          )
+          const hasExistingMeal = Boolean(existing?.meal)
+          return {
+            date: s.date,
+            kind: s.kind,
+            mealName: s.mealName,
+            // Ne pas écraser ni présélectionner les jours passés de la semaine déjà faite
+            selected: !isPast,
+            isPast,
+            hasExistingMeal,
+          }
+        })
       )
       toast.success(`${parsedSlots.length} repas détectés avec leurs jours !`)
       return
@@ -265,15 +308,32 @@ function MagicPlanModalContent({
 
     // Repli : extraction de plats simples sans jours identifiés
     if (batch.meals.length > 0) {
-      // Assigner dans l'ordre chronologique aux créneaux vides ou créneaux de la semaine
-      const emptySlots = slots.filter((s) => s.meal === null)
-      const targetSlots = emptySlots.length > 0 ? emptySlots : slots
-      const mapped = batch.meals.slice(0, targetSlots.length).map((m, idx) => ({
-        date: targetSlots[idx].slot_date,
-        kind: targetSlots[idx].slot_kind,
-        mealName: m.title,
-        selected: true,
-      }))
+      // Prioriser les créneaux futurs ou d'aujourd'hui pour ne pas toucher aux jours passés
+      const nonPastSlots = slots.filter((s) => {
+        const d = parseISODate(s.slot_date)
+        return !d || !isPastDay(d)
+      })
+      const emptySlots = nonPastSlots.filter((s) => s.meal === null)
+      const targetSlots =
+        emptySlots.length > 0
+          ? emptySlots
+          : nonPastSlots.length > 0
+            ? nonPastSlots
+            : slots
+
+      const mapped = batch.meals.slice(0, targetSlots.length).map((m, idx) => {
+        const target = targetSlots[idx]
+        const d = parseISODate(target.slot_date)
+        const isPast = d ? isPastDay(d) : false
+        return {
+          date: target.slot_date,
+          kind: target.slot_kind,
+          mealName: m.title,
+          selected: !isPast,
+          isPast,
+          hasExistingMeal: Boolean(target.meal),
+        }
+      })
 
       if (mapped.length > 0) {
         setDetectedSlots(mapped)
@@ -426,10 +486,7 @@ function MagicPlanModalContent({
                     <button
                       type="button"
                       className="text-[10px] text-primary hover:underline font-normal"
-                      onClick={() => {
-                        setStockOrCravings("")
-                        generate(onlyCatalog, "")
-                      }}
+                      onClick={() => setStockOrCravings("")}
                     >
                       Effacer
                     </button>
@@ -437,24 +494,24 @@ function MagicPlanModalContent({
                 </div>
                 <Input
                   value={stockOrCravings}
-                  onChange={(e) => {
-                    setStockOrCravings(e.target.value)
-                    generate(onlyCatalog, e.target.value)
+                  onChange={(e) => setStockOrCravings(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault()
+                      generate(onlyCatalog, stockOrCravings)
+                    }
                   }}
                   placeholder="ex: finir les courgettes, envie de pâtes, poulet..."
                   className="h-8.5 rounded-lg text-xs bg-surface border-line"
                 />
               </div>
 
-              <div className="flex items-center justify-between pt-1">
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
                 <div className="flex items-center gap-2">
                   <Switch
                     id="catalog-only"
                     checked={onlyCatalog}
-                    onCheckedChange={(checked) => {
-                      setOnlyCatalog(checked)
-                      generate(checked, stockOrCravings)
-                    }}
+                    onCheckedChange={(checked) => setOnlyCatalog(checked)}
                   />
                   <Label htmlFor="catalog-only" className="cursor-pointer font-medium text-xs">
                     Mon carnet uniquement
@@ -463,16 +520,22 @@ function MagicPlanModalContent({
 
                 <Button
                   type="button"
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
-                  className="h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-ink"
+                  className="tap-press h-8 gap-1.5 px-3 text-xs font-semibold text-primary border-primary/30 bg-primary/5 hover:bg-primary/15 shadow-2xs"
                   onClick={() => generate(onlyCatalog, stockOrCravings)}
                   disabled={isApplying}
                 >
-                  <RefreshCw className="size-3" />
+                  <RefreshCw className="size-3.5" />
                   <span>Tout régénérer</span>
                 </Button>
               </div>
+
+              {stockOrCravings.trim() ? (
+                <p className="text-[10px] text-muted-foreground">
+                  💡 Vos envies s&apos;appliquent aussi lorsque vous cliquez sur <strong>Changer</strong> pour un plat unique.
+                </p>
+              ) : null}
             </div>
 
             {/* Liste des propositions créneau par créneau (défilement tactile fluide) */}
@@ -804,9 +867,20 @@ function MagicPlanModalContent({
                         </button>
 
                         <div className="flex min-w-0 flex-1 flex-col gap-1">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                            {dateLabel} · {SLOT_LABEL[slot.kind]}
-                          </span>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                              {dateLabel} · {SLOT_LABEL[slot.kind]}
+                            </span>
+                            {slot.isPast ? (
+                              <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground">
+                                Déjà passé (non modifié)
+                              </span>
+                            ) : slot.hasExistingMeal ? (
+                              <span className="rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-amber-600 dark:text-amber-400">
+                                Remplacer le plat actuel
+                              </span>
+                            ) : null}
+                          </div>
                           <Input
                             value={slot.mealName}
                             onChange={(e) => {

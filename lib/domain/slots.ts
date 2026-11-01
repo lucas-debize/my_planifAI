@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/lib/database.types"
+import { addDays } from "date-fns"
 import { parseISODate, toISODate, weekDays } from "@/lib/dates"
 import { SLOTS, type SlotKind } from "@/lib/week"
 import { getMeal, type MealScope } from "@/lib/domain/meals"
@@ -224,4 +225,31 @@ export async function copyWeek(
       })
     }
   }
+}
+
+export async function clearWeekSlots(
+  supabase: Client,
+  scope: SlotScope,
+  weekStart: string
+): Promise<number> {
+  const startDate = parseISODate(weekStart)
+  if (!startDate) throw new Error("INVALID_WEEK")
+  const endDate = toISODate(addDays(startDate, 6))
+  const isFamily = scope.type === "family"
+
+  let query = supabase
+    .from("plan_slots")
+    .delete({ count: "exact" })
+    .gte("slot_date", weekStart)
+    .lte("slot_date", endDate)
+
+  if (isFamily) {
+    query = query.eq("family_id", scope.familyId)
+  } else {
+    query = query.eq("user_id", scope.userId).is("family_id", null)
+  }
+
+  const { count, error } = await query
+  if (error) throw new Error(error.message)
+  return count ?? 0
 }

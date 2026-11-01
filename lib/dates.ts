@@ -1,3 +1,4 @@
+import type { WeekStartDay } from "@/lib/domain/session"
 import {
   addDays,
   format,
@@ -12,8 +13,28 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 export function mondayOf(d: Date): Date {
   return startOfWeek(d, { weekStartsOn: 1 })
 }
-export function weekStartOf(d: Date, startDay: 1 | 6 = 1): Date {
+export function weekStartOf(d: Date, startDay: WeekStartDay = 1): Date {
   return startOfWeek(d, { weekStartsOn: startDay })
+}
+
+export const WEEK_DAY_OPTIONS: { day: WeekStartDay; label: string }[] = [
+  { day: 1, label: "Lundi" },
+  { day: 2, label: "Mardi" },
+  { day: 3, label: "Mercredi" },
+  { day: 4, label: "Jeudi" },
+  { day: 5, label: "Vendredi" },
+  { day: 6, label: "Samedi" },
+  { day: 0, label: "Dimanche" },
+]
+
+export const WEEK_DAY_LABELS: Record<WeekStartDay, string> = {
+  0: "Dimanche",
+  1: "Lundi",
+  2: "Mardi",
+  3: "Mercredi",
+  4: "Jeudi",
+  5: "Vendredi",
+  6: "Samedi",
 }
 
 
@@ -98,6 +119,6 @@ export function weekdayLong(d: Date): string {
 export function currentMondayIso(now = new Date()): string {
   return toISODate(mondayOf(now))
 }
-export function currentWeekStartIso(now = new Date(), startDay: 1 | 6 = 1): string {
+export function currentWeekStartIso(now = new Date(), startDay: WeekStartDay = 1): string {
   return toISODate(weekStartOf(now, startDay))
 }

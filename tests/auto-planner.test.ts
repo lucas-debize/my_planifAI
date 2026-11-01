@@ -194,5 +194,76 @@ describe("Auto-planner Magic Fill (Équilibrage & Planification locale)", () => 
       const otherNames = proposals.slice(1).map((p) => p.meal.name.toLowerCase())
       expect(otherNames).not.toContain(rerolled!.name.toLowerCase())
     })
+
+    it("respecte scrupuleusement l'option stockOrCravings lors d'un reroll de plat unique", () => {
+      const proposals = [
+        {
+          date: "2026-10-05",
+          kind: "diner" as const,
+          meal: { name: "Pizza", ingredients: ["Pâte", "Tomate"], origin: "ai" as const, category: "feculent" as const, isLight: false },
+        },
+      ]
+
+      const rerolled = rerollSlot({
+        slot: { date: "2026-10-05", kind: "diner" },
+        currentMealName: "Pizza",
+        proposals,
+        catalogMeals: [],
+        options: {
+          mode: "balanced",
+          onlyCatalog: false,
+          stockOrCravings: "envie de poulet",
+        },
+      })
+
+      expect(rerolled).not.toBeNull()
+      const text = `${rerolled!.name} ${rerolled!.ingredients.join(" ")}`.toLowerCase()
+      expect(text.includes("poulet") || rerolled!.category === "viande").toBe(true)
+    })
+
+    it("respecte onlyCatalog et recycle parmi le carnet si les plats uniques sont épuisés", () => {
+      const catalog: MealWithIngredients[] = [
+        {
+          id: "c-1",
+          name: "Gratin dauphinois",
+          origin: "user",
+          ingredients: [{ id: "i-1", name: "Pommes de terre", quantity: null }],
+        },
+        {
+          id: "c-2",
+          name: "Soupe de potimarron",
+          origin: "user",
+          ingredients: [{ id: "i-2", name: "Potimarron", quantity: null }],
+        },
+      ]
+
+      const proposals = [
+        {
+          date: "2026-10-05",
+          kind: "dejeuner" as const,
+          meal: { id: "c-1", name: "Gratin dauphinois", ingredients: ["Pommes de terre"], origin: "catalog" as const, category: "feculent" as const, isLight: false },
+        },
+        {
+          date: "2026-10-05",
+          kind: "diner" as const,
+          meal: { id: "c-2", name: "Soupe de potimarron", ingredients: ["Potimarron"], origin: "catalog" as const, category: "vege" as const, isLight: true },
+        },
+      ]
+
+      // Relance le déjeuner (qui était Gratin dauphinois) en mode carnet uniquement
+      const rerolled = rerollSlot({
+        slot: { date: "2026-10-05", kind: "dejeuner" },
+        currentMealName: "Gratin dauphinois",
+        proposals,
+        catalogMeals: catalog,
+        options: {
+          onlyCatalog: true,
+        },
+      })
+
+      expect(rerolled).not.toBeNull()
+      expect(rerolled!.origin).toBe("catalog")
+      expect(["c-1", "c-2"]).toContain(rerolled!.id!)
+    })
   })
 })

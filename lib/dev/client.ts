@@ -14,8 +14,8 @@ type Filter =
   | { kind: "gte"; col: string; value: unknown }
   | { kind: "lte"; col: string; value: unknown }
   | { kind: "in"; col: string; value: unknown[] }
-function ok<T>(data: T) {
-  return { data, error: null as { message: string } | null }
+function ok<T>(data: T, count: number | null = null) {
+  return { data, error: null as { message: string } | null, count }
 }
 
 function fail(message: string) {
@@ -285,15 +285,17 @@ class Query {
 
         if (this.op === "delete") {
           const remaining: Row[] = []
+          let count = 0
           for (const row of table) {
             if (matches(row, this.filters)) {
               cascadeDelete(store, this.table, row)
+              count += 1
             } else {
               remaining.push(row)
             }
           }
           ;(store[this.table] as Row[]) = remaining
-          return ok(null)
+          return ok(null, count)
         }
 
         const incoming = Array.isArray(this.payload)

@@ -2,6 +2,7 @@ import type { MealWithIngredients } from "@/lib/domain/meals"
 import type { WeekSlot } from "@/lib/domain/slots"
 import type { SlotKind } from "@/lib/week"
 import { normalizeName } from "@/lib/ingredients"
+import { isPastDay, parseISODate } from "@/lib/dates"
 
 export type MealCategory = "poisson" | "viande" | "vege" | "feculent"
 
@@ -464,8 +465,13 @@ export function generateWeekPlanProposal(params: {
   const shuffledCatalog = catalogPool.sort(() => Math.random() - 0.5)
   const shuffledStaples = staplesPool.sort(() => Math.random() - 0.5)
 
-  // 4. Identifier les créneaux vides
-  const emptySlots = slots.filter((s) => s.meal === null)
+  // 4. Identifier les créneaux vides (en privilégiant les créneaux d'aujourd'hui et futurs pour ne pas toucher aux jours passés)
+  const nonPastEmptySlots = slots.filter(
+    (s) => s.meal === null && (!parseISODate(s.slot_date) || !isPastDay(parseISODate(s.slot_date)!))
+  )
+  const emptySlots = nonPastEmptySlots.length > 0
+    ? nonPastEmptySlots
+    : slots.filter((s) => s.meal === null)
   const proposals: PlanProposal[] = []
 
   let lastCategory: MealCategory | null = null
@@ -541,9 +547,10 @@ export function rerollSlot(params: {
   currentMealName: string
   proposals: PlanProposal[]
   catalogMeals: MealWithIngredients[]
+  existingSlots?: WeekSlot[]
   options?: AutoPlanOptions
 }): PlannedMealCandidate | null {
-  const { currentMealName, proposals, catalogMeals, options } = params
+  const { currentMealName, proposals, catalogMeals, existingSlots, options } = params
   const isVegMode = options?.mode === "vegetarian"
 
   const usedNames = new Set(
@@ -551,6 +558,13 @@ export function rerollSlot(params: {
       .map((p) => normalizeName(p.meal.name))
       .filter((name) => name !== normalizeName(currentMealName))
   )
+  if (existingSlots) {
+    for (const s of existingSlots) {
+      if (s.meal?.name && !(s.slot_date === params.slot.date && s.slot_kind === params.slot.kind)) {
+        usedNames.add(normalizeName(s.meal.name))
+      }
+    }
+  }
 
   const pool: PlannedMealCandidate[] = []
 
@@ -571,7 +585,7 @@ export function rerollSlot(params: {
     })
   }
 
-  // Staples
+  // Staples si autorisé
   if (!options?.onlyCatalog) {
     for (const s of STAPLE_MEALS) {
       const norm = normalizeName(s.name)
@@ -588,34 +602,69 @@ export function rerollSlot(params: {
   }
 
   let filteredPool = pool.filter((c) => normalizeName(c.name) !== normalizeName(currentMealName))
+
+  // Si le carnet est activé exclusivement mais que tous les plats uniques sont déjà placés,
+  // recycler parmi les plats du carnet différents du plat actuel
+  if (options?.onlyCatalog && filteredPool.length === 0 && catalogMeals.length > 0) {
+    const catalogRecycled = catalogMeals
+      .filter((m) => normalizeName(m.name) !== normalizeName(currentMealName))
+      .map((m) => {
+        const ings = m.ingredients.map((i) => i.name)
+        const prof = analyzeMealProfile(m.name, ings)
+        return {
+          id: m.id,
+          name: m.name,
+          ingredients: ings,
+          origin: "catalog" as const,
+          category: prof.category,
+          isLight: prof.isLight,
+        }
+      })
+      .filter((c) => !isVegMode || (c.category !== "viande" && c.category !== "poisson"))
+
+    if (catalogRecycled.length > 0) {
+      filteredPool = catalogRecycled
+    }
+  }
+
   if (filteredPool.length === 0) return null
 
+  // Filtrage et priorisation stricte selon les consignes saisies (stock / envies)
   if (options?.stockOrCravings?.trim()) {
     const keywords = options.stockOrCravings
       .toLowerCase()
       .split(/[\s,;+.'’]+/)
       .map((k) => k.trim())
-      .filter((k) => k.length >= 3 && !STOPWORDS[k])
+      .filter((k) => k.length >= 2 && !STOPWORDS[k])
+
     if (keywords.length > 0) {
       const score = (c: PlannedMealCandidate) => {
         const text = `${c.name} ${c.ingredients.join(" ")}`.toLowerCase()
-        return keywords.filter(
-          (kw) =>
-            text.includes(kw) ||
+        let s = 0
+        for (const kw of keywords) {
+          if (text.includes(kw)) s += 2
+          if (
             (kw === "poisson" && c.category === "poisson") ||
             (kw === "vege" && c.category === "vege") ||
             (kw === "viande" && c.category === "viande") ||
             (kw === "feculent" && c.category === "feculent")
-        ).length
+          ) {
+            s += 1
+          }
+        }
+        return s
       }
-      const matching = filteredPool.filter((c) => score(c) > 0)
-      if (matching.length > 0) {
-        filteredPool = matching
+
+      const scores = filteredPool.map((c) => ({ candidate: c, score: score(c) }))
+      const maxScore = Math.max(...scores.map((x) => x.score))
+
+      if (maxScore > 0) {
+        filteredPool = scores.filter((x) => x.score === maxScore).map((x) => x.candidate)
       }
     }
   }
 
-  // Tirage aléatoire
+  // Tirage aléatoire parmi les meilleurs candidats correspondants
   const index = Math.floor(Math.random() * filteredPool.length)
   return filteredPool[index]
 }

@@ -796,4 +796,25 @@ Vendredi
       expect(jeudiMidi?.mealName).toBe("Restaurant")
     })
   })
+
+  describe("extractMealsFromText - Listes d'idées et de plats en vrac", () => {
+    it("détecte une liste simple de 2 plats sans puces comme une liste", () => {
+      const text = `Lasagnes bolognaise\nQuiche aux poireaux`
+      const batch = extractMealsFromText(text)
+      expect(batch.kind).toBe("list")
+      expect(batch.meals.length).toBe(2)
+      expect(batch.meals[0].title).toBe("Lasagnes bolognaise")
+      expect(batch.meals[1].title).toBe("Quiche aux poireaux")
+    })
+
+    it("détecte des plats séparés par des virgules sur une seule ligne", () => {
+      const text = `Poulet basquaise, Tartiflette savoyarde, Salade césar`
+      const batch = extractMealsFromText(text)
+      expect(batch.kind).toBe("list")
+      expect(batch.meals.length).toBe(3)
+      expect(batch.meals[0].title).toBe("Poulet basquaise")
+      expect(batch.meals[1].title).toBe("Tartiflette savoyarde")
+      expect(batch.meals[2].title).toBe("Salade césar")
+    })
+  })
 })

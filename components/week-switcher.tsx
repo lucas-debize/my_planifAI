@@ -1,5 +1,7 @@
 "use client"
 
+import type { WeekStartDay } from "@/lib/domain/session"
+
 import Link from "next/link"
 import { addDays } from "date-fns"
 import { ChevronLeft, ChevronRight } from "lucide-react"
@@ -25,8 +27,8 @@ export function WeekSwitcher({
   if (!monday) return null
   const prev = toISODate(addDays(monday, -7))
   const next = toISODate(addDays(monday, 7))
-  const isSaturday = monday.getDay() === 6
-  const todayIso = currentWeekStartIso(new Date(), isSaturday ? 6 : 1)
+  const startDay = monday.getDay() as WeekStartDay
+  const todayIso = currentWeekStartIso(new Date(), startDay)
   const current = todayIso === weekStart
 
   return (

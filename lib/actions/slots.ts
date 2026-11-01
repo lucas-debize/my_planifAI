@@ -1,6 +1,7 @@
 "use server"
 
 import {
+  clearWeekSlots as clearWeekSlotsDomain,
   copyWeek as copyWeekDomain,
   getWeekSlots as getWeekSlotsDomain,
   setSlot as setSlotDomain,
@@ -49,6 +50,13 @@ export async function copyWeek(input: {
   const { supabase, authUid, scope } = await requireScopedContext()
   await copyWeekDomain(supabase, toSlotScope(scope, authUid), input)
   revalidateApp()
+}
+
+export async function clearWeekSlotsAction(weekStart: string): Promise<{ deletedCount: number }> {
+  const { supabase, authUid, scope } = await requireScopedContext()
+  const count = await clearWeekSlotsDomain(supabase, toSlotScope(scope, authUid), weekStart)
+  revalidateApp()
+  return { deletedCount: count }
 }
 
 /**

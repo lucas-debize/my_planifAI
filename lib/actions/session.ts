@@ -93,7 +93,13 @@ export async function switchPlanningScopeAction(
 export async function getWeekStartDay(): Promise<WeekStartDay> {
   const cookieStore = await cookies()
   const val = cookieStore.get(WEEK_START_DAY_COOKIE)?.value
-  return val === "6" ? 6 : 1
+  if (val !== undefined && val !== "") {
+    const parsed = Number(val)
+    if (Number.isInteger(parsed) && parsed >= 0 && parsed <= 6) {
+      return parsed as WeekStartDay
+    }
+  }
+  return 1
 }
 
 export async function setWeekStartDayAction(day: WeekStartDay): Promise<void> {

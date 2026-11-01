@@ -2,7 +2,7 @@ import { describe, it, expect } from "bun:test"
 import { SCOPE_COOKIE, type PlanningScope } from "@/lib/domain/session"
 import { resolveMealCopyName, knownFromMeals } from "@/lib/domain/meals"
 import { displayName, normalizeName } from "@/lib/ingredients"
-import { parseISODate, toISODate, weekDays } from "@/lib/dates"
+import { parseISODate, toISODate, weekDays, weekStartOf, WEEK_DAY_LABELS } from "@/lib/dates"
 import { SLOTS } from "@/lib/week"
 
 describe("Domaine Planning, Repas & Gestion de Session", () => {
@@ -298,6 +298,32 @@ describe("Domaine Planning, Repas & Gestion de Session", () => {
     it("autorise un plat distinct", () => {
       const match = checkDuplicate("Poulet au curry", existingMeals)
       expect(match).toBeNull()
+    })
+  })
+
+  describe("Commencement de la semaine sur n'importe quel jour (0 à 6)", () => {
+    const sampleDate = new Date(2026, 9, 28) // Mercredi 28 octobre 2026
+
+    it("calcule correctement le début de semaine pour chaque jour (0-6)", () => {
+      // Lundi = 26 oct
+      expect(toISODate(weekStartOf(sampleDate, 1))).toBe("2026-10-26")
+      // Mardi = 27 oct
+      expect(toISODate(weekStartOf(sampleDate, 2))).toBe("2026-10-27")
+      // Mercredi = 28 oct
+      expect(toISODate(weekStartOf(sampleDate, 3))).toBe("2026-10-28")
+      // Jeudi = 22 oct (jeudi précédent)
+      expect(toISODate(weekStartOf(sampleDate, 4))).toBe("2026-10-22")
+      // Vendredi = 23 oct
+      expect(toISODate(weekStartOf(sampleDate, 5))).toBe("2026-10-23")
+      // Samedi = 24 oct
+      expect(toISODate(weekStartOf(sampleDate, 6))).toBe("2026-10-24")
+      // Dimanche = 25 oct
+      expect(toISODate(weekStartOf(sampleDate, 0))).toBe("2026-10-25")
+
+      expect(WEEK_DAY_LABELS[0]).toBe("Dimanche")
+      expect(WEEK_DAY_LABELS[1]).toBe("Lundi")
+      expect(WEEK_DAY_LABELS[3]).toBe("Mercredi")
+      expect(WEEK_DAY_LABELS[6]).toBe("Samedi")
     })
   })
 })
