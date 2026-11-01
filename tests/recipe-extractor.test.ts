@@ -249,11 +249,11 @@ Pâtes tagliatelles, 150g de lardons, 3 jaunes d'oeufs, parmesan râpé
       expect(names.some((n) => n.includes("crème") || n.includes("creme"))).toBe(true)
     })
 
-    it("attribue une base équilibrée pour un plat inconnu (ex: Wok exotique)", () => {
-      const ingredients = getDefaultRecipeForDish("Wok exotique")
-      expect(ingredients.length >= 3).toBe(true)
-      const names = ingredients.map((i) => i.name.toLowerCase())
-      expect(names.some((n) => n.includes("nouille") || n.includes("légume") || n.includes("soja"))).toBe(true)
+    it("ne met aucun ingrédient pour un plat inconnu (ex: Wok exotique ou Corne de boeuf)", () => {
+      const ingredientsWok = getDefaultRecipeForDish("Wok exotique")
+      expect(ingredientsWok).toEqual([])
+      const ingredientsCorne = getDefaultRecipeForDish("Corne de boeuf")
+      expect(ingredientsCorne).toEqual([])
     })
   })
 

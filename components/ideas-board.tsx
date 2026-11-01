@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Download, MoreHorizontal, Plus, Search, Sparkles, Trash2, Users, X } from "lucide-react"
+import { AlertCircle, Download, MoreHorizontal, Plus, Search, Sparkles, Trash2, Users, X } from "lucide-react"
 import { toast } from "sonner"
 import { PageHeader } from "@/components/page-header"
 import { EmptyState } from "@/components/empty-state"
@@ -37,7 +37,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { MagicRecipeDialog } from "@/components/magic-recipe-dialog"
 import { ingredientCountLabel } from "@/components/meal-picker"
-import { importPersonalMealsAction, importFamilyMealsAction, deleteMeal } from "@/lib/actions/meals"
+import { importPersonalMealsAction, importFamilyMealsAction, deleteMeal, deleteAllMealsAction } from "@/lib/actions/meals"
 import { actionErrorMessage } from "@/lib/errors"
 import { tapFeedback } from "@/hooks/use-press"
 import type { MealWithIngredients } from "@/lib/domain/meals"
@@ -63,6 +63,26 @@ export function IdeasBoard({
   const [isImporting, startImportTransition] = useTransition()
   const [mealToDelete, setMealToDelete] = useState<MealWithIngredients | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [confirmClearAllOpen, setConfirmClearAllOpen] = useState(false)
+  const [isClearingAll, setIsClearingAll] = useState(false)
+
+  async function handleConfirmDeleteAll() {
+    setIsClearingAll(true)
+    try {
+      const res = await deleteAllMealsAction()
+      toast.success(
+        res.count > 0
+          ? `${res.count} idée${res.count > 1 ? "s" : ""} supprimée${res.count > 1 ? "s" : ""}`
+          : "Toutes les idées ont été supprimées"
+      )
+      setConfirmClearAllOpen(false)
+      router.refresh()
+    } catch (err) {
+      toast.error(actionErrorMessage(err))
+    } finally {
+      setIsClearingAll(false)
+    }
+  }
 
   async function handleConfirmDelete() {
     if (!mealToDelete) return
@@ -139,57 +159,54 @@ export function IdeasBoard({
       <PageHeader
         title="Idées"
         actions={
-          <div className="flex items-center gap-1.5 shrink-0">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setMagicOpen(true)}
-              className="tap-press min-h-10 gap-1.5 rounded-xl border-primary/30 bg-primary/10 text-xs font-semibold text-primary hover:bg-primary/20 shadow-2xs transition-all sm:min-h-11 sm:text-sm"
-            >
-              <Sparkles className="size-4 text-primary" />
-              <span>Import magique</span>
-            </Button>
-
-            {importableMeals.length > 0 ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="tap-press min-h-10 px-2.5 gap-1 rounded-xl border-line bg-surface text-xs font-semibold shadow-2xs hover:bg-muted"
-                    aria-label="Options d'importation"
-                  >
-                    <MoreHorizontal className="size-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-64 p-1.5 rounded-xl shadow-lg border border-line bg-surface">
-                  <DropdownMenuItem
-                    onClick={() => setMagicOpen(true)}
-                    className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer"
-                  >
-                    <Sparkles className="size-4 text-primary" />
-                    <span>Import magique (photo, texte, liste)</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      setSelectedMealIds(new Set(importableMeals.map((m) => m.id)))
-                      setImportOpen(true)
-                    }}
-                    className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer"
-                  >
-                    <Download className="size-4 text-muted-foreground" />
-                    <span>
-                      {isFamilyMode
-                        ? "Importer mes recettes perso"
-                        : "Importer les recettes du groupe"}
-                    </span>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : null}
-          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="tap-press min-h-10 px-2.5 gap-1.5 rounded-xl border-line bg-surface text-xs font-semibold shadow-2xs hover:bg-muted"
+                aria-label="Options du carnet d'idées"
+              >
+                <MoreHorizontal className="size-4" />
+                <span className="hidden sm:inline">Options</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64 p-1.5 rounded-xl shadow-lg border border-line bg-surface">
+              <DropdownMenuItem
+                onClick={() => setMagicOpen(true)}
+                className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer"
+              >
+                <Sparkles className="size-4 text-primary" />
+                <span>Import magique (photo, texte, liste)</span>
+              </DropdownMenuItem>
+              {importableMeals.length > 0 ? (
+                <DropdownMenuItem
+                  onClick={() => {
+                    setSelectedMealIds(new Set(importableMeals.map((m) => m.id)))
+                    setImportOpen(true)
+                  }}
+                  className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium cursor-pointer"
+                >
+                  <Download className="size-4 text-muted-foreground" />
+                  <span>
+                    {isFamilyMode
+                      ? "Importer mes recettes perso"
+                      : "Importer les recettes du groupe"}
+                  </span>
+                </DropdownMenuItem>
+              ) : null}
+              {meals.length > 0 ? (
+                <DropdownMenuItem
+                  onClick={() => setConfirmClearAllOpen(true)}
+                  className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium text-destructive cursor-pointer hover:bg-destructive/10 focus:bg-destructive/10 focus:text-destructive"
+                >
+                  <Trash2 className="size-4 text-destructive" />
+                  <span>Supprimer toutes les idées</span>
+                </DropdownMenuItem>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
         }
       />
 
@@ -403,10 +420,35 @@ export function IdeasBoard({
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Dialogue de confirmation de suppression de toutes les idées */}
+      <AlertDialog open={confirmClearAllOpen} onOpenChange={setConfirmClearAllOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="font-fraunces">
+              Supprimer toutes les idées de repas ?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-xs sm:text-sm text-muted-foreground">
+              Cette action supprimera définitivement l&apos;ensemble des {meals.length} plat{meals.length > 1 ? "s" : ""} de votre carnet {isFamilyMode ? "du groupe" : "personnel"}. Les créneaux du planning qui utilisent ces plats deviendront vides.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isClearingAll}>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDeleteAll}
+              disabled={isClearingAll}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isClearingAll ? "Suppression..." : "Tout supprimer"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Dialogue d'import magique */}
       <MagicRecipeDialog
         open={magicOpen}
         onOpenChange={setMagicOpen}
+        existingMeals={meals}
         onBatchImported={() => router.refresh()}
       />
     </>
@@ -513,9 +555,17 @@ function MealCardItem({
               <p className="font-fraunces text-lg sm:text-xl font-bold tracking-tight text-ink group-hover:text-primary transition-colors break-words line-clamp-2">
                 {meal.name}
               </p>
-              {isFamilyMode ? (
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {meal.createdByName ? (
+              <div className="flex items-center gap-1.5 shrink-0">
+                {meal.ingredients.length === 0 ? (
+                  <span
+                    title="Aucun ingrédient renseigné"
+                    className="flex size-5 items-center justify-center rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                  >
+                    <AlertCircle className="size-3.5" />
+                  </span>
+                ) : null}
+                {isFamilyMode ? (
+                  meal.createdByName ? (
                     <span className="rounded-full bg-muted/80 px-2 py-0.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                       {meal.createdByName}
                     </span>
@@ -523,13 +573,20 @@ function MealCardItem({
                     <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary uppercase tracking-wider">
                       IA
                     </span>
-                  ) : null}
-                </div>
-              ) : null}
+                  ) : null
+                ) : null}
+              </div>
             </div>
-            <p className="mt-1 text-xs sm:text-sm text-muted-foreground font-medium">
-              {ingredientCountLabel(meal.ingredients.length)}
-            </p>
+            {meal.ingredients.length === 0 ? (
+              <div className="mt-1 flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 font-medium">
+                <AlertCircle className="size-3.5 shrink-0" />
+                <span>Sans ingrédients</span>
+              </div>
+            ) : (
+              <p className="mt-1 text-xs sm:text-sm text-muted-foreground font-medium">
+                {ingredientCountLabel(meal.ingredients.length)}
+              </p>
+            )}
           </div>
           <div className="mt-3 flex items-center justify-between text-[11px] text-muted-foreground/70 group-hover:text-primary font-semibold transition-colors">
             <span>Modifier le plat</span>

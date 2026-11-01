@@ -659,3 +659,18 @@ export async function copyMeal(
     origin: sourceMeal.origin,
   })
 }
+
+export async function deleteAllMeals(
+  supabase: Client,
+  scope: MealScope
+): Promise<number> {
+  let query = supabase.from("meals").delete({ count: "exact" })
+  if (scope.type === "family") {
+    query = query.eq("family_id", scope.familyId)
+  } else {
+    query = query.eq("user_id", scope.userId).is("family_id", null)
+  }
+  const { count, error } = await query
+  if (error) throw new Error(error.message)
+  return count ?? 0
+}

@@ -62,18 +62,6 @@ export function EditMealPage({
             router.push("/idees")
           }}
         />
-        <div className="mt-8 pt-6 border-t border-line/60 flex flex-col gap-2">
-          <p className="text-xs text-muted-foreground font-medium">Zone de danger</p>
-          <Button
-            type="button"
-            variant="outline"
-            className="tap-press w-full min-h-11 border-destructive/30 text-destructive hover:bg-destructive/10 text-sm font-semibold rounded-xl gap-2"
-            onClick={() => setOpen(true)}
-          >
-            <Trash2 className="size-4" />
-            <span>Supprimer ce plat définitivement</span>
-          </Button>
-        </div>
       </div>
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogContent>

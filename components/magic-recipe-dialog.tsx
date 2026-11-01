@@ -32,7 +32,9 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { extractRecipeAction } from "@/lib/actions/ai"
 import { scanImageClient } from "@/lib/ai/client-scan"
-import { batchCreateMealsAction } from "@/lib/actions/meals"
+import { batchCreateMealsAction, upsertMeal } from "@/lib/actions/meals"
+import { findSimilarMeal } from "@/lib/domain/meal-similarity"
+import { MealMergeDialog, type MealMergeOption, type MealMergeCandidate } from "@/components/meal-merge-dialog"
 import {
   extractMealsFromText,
   type ExtractedRecipe,
@@ -49,12 +51,14 @@ export function MagicRecipeDialog({
   onOpenChange: controlledOnOpenChange,
   onRecipeExtracted,
   onBatchImported,
+  existingMeals,
   trigger,
 }: {
   open?: boolean
   onOpenChange?: (open: boolean) => void
   onRecipeExtracted?: (recipe: ExtractedRecipe) => void
   onBatchImported?: (meals: MealWithIngredients[]) => void
+  existingMeals?: MealWithIngredients[]
   trigger?: React.ReactNode
 }) {
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
@@ -64,6 +68,17 @@ export function MagicRecipeDialog({
     if (!isControlled) setUncontrolledOpen(next)
     controlledOnOpenChange?.(next)
   }
+
+  type ConflictItem = {
+    existing: MealWithIngredients
+    incoming: MealMergeCandidate
+  }
+  const [conflictQueue, setConflictQueue] = useState<ConflictItem[]>([])
+  const [currentConflict, setCurrentConflict] = useState<ConflictItem | null>(null)
+  const [nonConflictPayload, setNonConflictPayload] = useState<
+    { name: string; ingredientNames: { name: string; quantity?: string }[] }[]
+  >([])
+  const [accumulatedCreated, setAccumulatedCreated] = useState<MealWithIngredients[]>([])
   const [tab, setTab] = useState<"text" | "photo">("text")
   const [textContent, setTextContent] = useState("")
   // Photo state
@@ -280,28 +295,23 @@ export function MagicRecipeDialog({
     resetAll()
   }
 
-  async function handleConfirmBatchImport() {
-    if (!previewBatch) return
-    const selectedMeals = previewBatch.meals.filter((_, idx) => selectedIndices.has(idx))
-    if (selectedMeals.length === 0) {
-      toast.error("Veuillez sélectionner au moins un plat à importer.")
-      return
-    }
-
+  async function finalizeBatchImport(
+    payloadToCreate: { name: string; ingredientNames: { name: string; quantity?: string }[] }[],
+    alreadyResolved: MealWithIngredients[] = []
+  ) {
     setIsSaving(true)
     try {
-      const payload = selectedMeals.map((m) => ({
-        name: m.title.trim() || "Plat sans nom",
-        ingredientNames: m.detailedIngredients.map((ing) => ({
-          name: ing.name,
-          quantity: ing.quantity,
-        })),
-      }))
-      const created = await batchCreateMealsAction(payload)
-      onBatchImported?.(created)
-      toast.success(
-        `${created.length} plat${created.length > 1 ? "s" : ""} importé${created.length > 1 ? "s" : ""} dans vos idées !`
-      )
+      let newlyCreated: MealWithIngredients[] = []
+      if (payloadToCreate.length > 0) {
+        newlyCreated = await batchCreateMealsAction(payloadToCreate)
+      }
+      const allImported = [...alreadyResolved, ...newlyCreated]
+      if (allImported.length > 0) {
+        onBatchImported?.(allImported)
+        toast.success(
+          `${allImported.length} plat${allImported.length > 1 ? "s" : ""} enregistré${allImported.length > 1 ? "s" : ""} dans vos idées !`
+        )
+      }
       setOpen(false)
       resetAll()
     } catch (err) {
@@ -311,7 +321,88 @@ export function MagicRecipeDialog({
     }
   }
 
+  async function handleResolveConflict(action: MealMergeOption) {
+    if (!currentConflict) return
+    const { existing, incoming } = currentConflict
+    const currentResolved = [...accumulatedCreated]
+    const currentPending = [...nonConflictPayload]
+
+    if (action === "update_existing") {
+      try {
+        const updated = await upsertMeal({
+          id: existing.id,
+          name: existing.name,
+          ingredientNames: incoming.ingredientNames,
+        })
+        currentResolved.push(updated)
+        setAccumulatedCreated(currentResolved)
+      } catch (err) {
+        toast.error(actionErrorMessage(err))
+      }
+    } else if (action === "keep_both") {
+      currentPending.push({
+        name: incoming.name,
+        ingredientNames: incoming.ingredientNames.map((i) => ({
+          name: i.name,
+          quantity: i.quantity || undefined,
+        })),
+      })
+      setNonConflictPayload(currentPending)
+    }
+
+    if (conflictQueue.length > 0) {
+      setCurrentConflict(conflictQueue[0])
+      setConflictQueue((prev) => prev.slice(1))
+    } else {
+      setCurrentConflict(null)
+      await finalizeBatchImport(currentPending, currentResolved)
+    }
+  }
+
+  async function handleConfirmBatchImport() {
+    if (!previewBatch) return
+    const selectedMeals = previewBatch.meals.filter((_, idx) => selectedIndices.has(idx))
+    if (selectedMeals.length === 0) {
+      toast.error("Veuillez sélectionner au moins un plat à importer.")
+      return
+    }
+
+    const fullPayload = selectedMeals.map((m) => ({
+      name: m.title.trim() || "Plat sans nom",
+      ingredientNames: m.detailedIngredients.map((ing) => ({
+        name: ing.name,
+        quantity: ing.quantity,
+      })),
+    }))
+
+    // Vérifier les doublons avec existingMeals
+    if (existingMeals && existingMeals.length > 0) {
+      const conflicts: ConflictItem[] = []
+      const nonConflicts: typeof fullPayload = []
+
+      for (const item of fullPayload) {
+        const similar = findSimilarMeal(item.name, existingMeals)
+        if (similar) {
+          conflicts.push({ existing: similar, incoming: item })
+        } else {
+          nonConflicts.push(item)
+        }
+      }
+
+      if (conflicts.length > 0) {
+        setNonConflictPayload(nonConflicts)
+        setAccumulatedCreated([])
+        setConflictQueue(conflicts.slice(1))
+        setCurrentConflict(conflicts[0])
+        return
+      }
+    }
+
+    await finalizeBatchImport(fullPayload)
+  }
+
   return (
+    <>
     <Dialog
       open={open}
       onOpenChange={(next) => {
@@ -335,12 +426,7 @@ export function MagicRecipeDialog({
         </DialogTrigger>
       ) : null}
 
-      <DialogContent
-        className={cn(
-          "max-h-[90vh] overflow-y-auto sm:max-w-lg transition-all",
-          previewBatch && "sm:max-w-2xl"
-        )}
-      >
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <div className="flex items-center gap-2">
             <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -879,5 +965,17 @@ export function MagicRecipeDialog({
         )}
       </DialogContent>
     </Dialog>
+
+    {/* Comparatif de fusion si plat similaire déjà existant */}
+    <MealMergeDialog
+      open={currentConflict !== null}
+      onOpenChange={(openNext) => {
+        if (!openNext) setCurrentConflict(null)
+      }}
+      existingMeal={currentConflict?.existing ?? null}
+      incomingMeal={currentConflict?.incoming ?? null}
+      onResolve={handleResolveConflict}
+    />
+  </>
   )
 }

@@ -12,6 +12,8 @@ import { actionErrorMessage } from "@/lib/errors"
 import { displayName, normalizeName } from "@/lib/ingredients"
 import { cleanIngredientName, extractIngredientQuantity } from "@/lib/ai/recipe-extractor"
 import type { MealWithIngredients } from "@/lib/domain/meals"
+import { findSimilarMeal } from "@/lib/domain/meal-similarity"
+import { MealMergeDialog, type MealMergeOption } from "@/components/meal-merge-dialog"
 
 export type FormIngredientItem = {
   name: string
@@ -51,13 +53,13 @@ export function MealForm({
   const [editName, setEditName] = useState("")
   const [editQty, setEditQty] = useState("")
 
-  const duplicateMeal = useMemo(() => {
-    if (meal) return null
-    const norm = normalizeName(name)
-    if (!norm) return null
-    return existingMeals?.find((m) => normalizeName(m.name) === norm) ?? null
-  }, [meal, name, existingMeals])
+  const [mergeDialogOpen, setMergeDialogOpen] = useState(false)
+  const [pendingSimilarMeal, setPendingSimilarMeal] = useState<MealWithIngredients | null>(null)
 
+  const duplicateMeal = useMemo(() => {
+    if (meal || !name.trim() || !existingMeals) return null
+    return findSimilarMeal(name, existingMeals)
+  }, [meal, name, existingMeals])
   const selectedNorms = useMemo(
     () => new Set(ingredients.map((i) => normalizeName(i.name))),
     [ingredients]
@@ -221,16 +223,35 @@ export function MealForm({
       return
     }
 
-    if (duplicateMeal) {
-      toast.error(`Le plat « ${duplicateMeal.name} » existe déjà dans tes idées.`)
-      return
+    if (!meal && existingMeals) {
+      const similar = findSimilarMeal(name, existingMeals)
+      if (similar) {
+        setPendingSimilarMeal(similar)
+        setMergeDialogOpen(true)
+        return
+      }
     }
 
     await executeSave()
   }
 
+  function handleResolveMerge(action: MealMergeOption) {
+    if (!pendingSimilarMeal) return
+    setMergeDialogOpen(false)
+
+    if (action === "update_existing") {
+      executeSave(pendingSimilarMeal.id)
+    } else if (action === "keep_both") {
+      executeSave()
+    } else {
+      toast.info("Le nouveau plat n'a pas été ajouté.")
+      onCancel?.()
+    }
+  }
+
   return (
-    <form className="flex flex-col gap-5" onSubmit={onSubmit}>
+    <>
+      <form className="flex flex-col gap-5" onSubmit={onSubmit}>
       <div className="flex flex-col gap-2">
         <Label htmlFor="meal-name">Nom du plat</Label>
         <Input
@@ -384,22 +405,24 @@ export function MealForm({
           <div className="flex items-start gap-2">
             <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
             <div className="flex-1">
-              <p className="font-semibold">Ce plat existe déjà dans tes idées</p>
+              <p className="font-semibold">Plat similaire déjà présent</p>
               <p className="mt-0.5 text-amber-800/90 dark:text-amber-300/90">
-                Un plat nommé « {duplicateMeal.name} » existe déjà ({ingredientCountLabel(duplicateMeal.ingredients.length)}). Tu ne peux pas créer de doublon.
+                Un plat nommé « {duplicateMeal.name} » existe déjà dans vos idées ({ingredientCountLabel(duplicateMeal.ingredients.length)}).
               </p>
             </div>
           </div>
-          <div className="flex justify-end pt-1">
+          <div className="flex justify-end gap-2 pt-1">
             <Button
               type="button"
               size="sm"
-              variant="destructive"
-              className="h-8 text-xs font-semibold"
-              disabled={pending}
-              onClick={() => executeSave(duplicateMeal.id)}
+              variant="outline"
+              className="h-8 text-xs font-semibold bg-surface border-line"
+              onClick={() => {
+                setPendingSimilarMeal(duplicateMeal)
+                setMergeDialogOpen(true)
+              }}
             >
-              Écraser l&apos;ancien plat
+              Comparer &amp; Fusionner
             </Button>
           </div>
         </div>
@@ -428,5 +451,13 @@ export function MealForm({
         </Button>
       </div>
     </form>
+      <MealMergeDialog
+        open={mergeDialogOpen}
+        onOpenChange={setMergeDialogOpen}
+        existingMeal={pendingSimilarMeal}
+        incomingMeal={pendingSimilarMeal ? { name: name.trim(), ingredientNames: prepareIngredients() } : null}
+        onResolve={handleResolveMerge}
+      />
+    </>
   )
 }

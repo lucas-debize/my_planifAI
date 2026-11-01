@@ -423,204 +423,41 @@ const CLASSIC_DISH_RECIPES: {
   },
 ]
 
-const CULINARY_FAMILIES: {
-  family: string
-  keywords: string[]
-  ingredients: { name: string; quantity: string }[]
-}[] = [
-  {
-    family: "wok",
-    keywords: ["wok", "saute asiatique"],
-    ingredients: [
-      { name: "Nouilles", quantity: "300g" },
-      { name: "Légumes croquants", quantity: "300g" },
-      { name: "Sauce soja", quantity: "2 c. à soupe" },
-      { name: "Ail", quantity: "1 gousse" },
-      { name: "Huile de sésame", quantity: "1 c. à soupe" },
-    ],
-  },
-  {
-    family: "curry",
-    keywords: ["curry", "colombo", "massale"],
-    ingredients: [
-      { name: "Poulet ou Protéine", quantity: "350g" },
-      { name: "Riz basmati", quantity: "300g" },
-      { name: "Lait de coco", quantity: "20cl" },
-      { name: "Poudre de curry", quantity: "1 c. à café" },
-      { name: "Oignon", quantity: "1" },
-    ],
-  },
-  {
-    family: "pates",
-    keywords: ["pate", "spaghetti", "coquillette", "penne", "tagliatelle", "macaroni"],
-    ingredients: [
-      { name: "Pâtes", quantity: "400g" },
-      { name: "Sauce tomate", quantity: "200g" },
-      { name: "Parmesan", quantity: "50g" },
-      { name: "Oignon", quantity: "1" },
-      { name: "Huile d'olive", quantity: "1 c. à soupe" },
-    ],
-  },
-  {
-    family: "riz",
-    keywords: ["riz"],
-    ingredients: [
-      { name: "Riz", quantity: "300g" },
-      { name: "Légumes variés", quantity: "300g" },
-      { name: "Oignon", quantity: "1" },
-      { name: "Huile d'olive", quantity: "1 c. à soupe" },
-    ],
-  },
-  {
-    family: "salade",
-    keywords: ["salade"],
-    ingredients: [
-      { name: "Salade verte", quantity: "1" },
-      { name: "Tomates", quantity: "2" },
-      { name: "Concombre", quantity: "1" },
-      { name: "Vinaigrette", quantity: "2 c. à soupe" },
-    ],
-  },
-  {
-    family: "soupe",
-    keywords: ["soupe", "veloute", "potage", "bouillon"],
-    ingredients: [
-      { name: "Carottes", quantity: "3" },
-      { name: "Poireaux", quantity: "2" },
-      { name: "Pommes de terre", quantity: "2" },
-      { name: "Crème fraîche", quantity: "10cl" },
-    ],
-  },
-  {
-    family: "tarte_quiche",
-    keywords: ["quiche", "tarte", "tourte"],
-    ingredients: [
-      { name: "Pâte brisée", quantity: "1" },
-      { name: "Oeufs", quantity: "3" },
-      { name: "Crème fraîche", quantity: "20cl" },
-      { name: "Emmental râpé", quantity: "100g" },
-    ],
-  },
-  {
-    family: "gratin",
-    keywords: ["gratin"],
-    ingredients: [
-      { name: "Pommes de terre", quantity: "600g" },
-      { name: "Crème fraîche", quantity: "20cl" },
-      { name: "Emmental râpé", quantity: "100g" },
-      { name: "Ail", quantity: "1 gousse" },
-    ],
-  },
-  {
-    family: "pizza",
-    keywords: ["pizza"],
-    ingredients: [
-      { name: "Pâte à pizza", quantity: "1" },
-      { name: "Sauce tomate", quantity: "200g" },
-      { name: "Mozzarella", quantity: "150g" },
-      { name: "Origan", quantity: "1 pincée" },
-    ],
-  },
-  {
-    family: "burger",
-    keywords: ["burger"],
-    ingredients: [
-      { name: "Pains burger", quantity: "2" },
-      { name: "Steak haché", quantity: "2" },
-      { name: "Cheddar", quantity: "2 tranches" },
-      { name: "Tomates", quantity: "1" },
-    ],
-  },
-  {
-    family: "poisson",
-    keywords: ["saumon", "cabillaud", "colin", "poisson", "thon", "crevette"],
-    ingredients: [
-      { name: "Filet de poisson", quantity: "400g" },
-      { name: "Riz", quantity: "250g" },
-      { name: "Courgettes", quantity: "2" },
-      { name: "Citron", quantity: "1" },
-      { name: "Huile d'olive", quantity: "1 c. à soupe" },
-    ],
-  },
-  {
-    family: "volaille",
-    keywords: ["poulet", "dinde", "volaille"],
-    ingredients: [
-      { name: "Filets de volaille", quantity: "400g" },
-      { name: "Pommes de terre", quantity: "400g" },
-      { name: "Haricots verts", quantity: "300g" },
-      { name: "Beurre", quantity: "20g" },
-    ],
-  },
-  {
-    family: "viande",
-    keywords: ["boeuf", "steak", "porc", "viande", "veau"],
-    ingredients: [
-      { name: "Viande", quantity: "400g" },
-      { name: "Féculent", quantity: "300g" },
-      { name: "Légumes", quantity: "200g" },
-      { name: "Oignon", quantity: "1" },
-    ],
-  },
-  {
-    family: "oeufs",
-    keywords: ["oeuf", "omelette"],
-    ingredients: [
-      { name: "Oeufs", quantity: "4" },
-      { name: "Beurre", quantity: "20g" },
-      { name: "Salade verte", quantity: "1" },
-      { name: "Pain", quantity: "quelques tranches" },
-    ],
-  },
-  {
-    family: "wrap",
-    keywords: ["wrap", "fajita", "burrito", "taco"],
-    ingredients: [
-      { name: "Galettes wrap", quantity: "4" },
-      { name: "Poulet", quantity: "200g" },
-      { name: "Tomates", quantity: "2" },
-      { name: "Salade", quantity: "quelques feuilles" },
-      { name: "Sauce au yaourt", quantity: "4 c. à soupe" },
-    ],
-  },
-]
 
 /**
  * Génère une recette par défaut équilibrée pour un nom de plat donné.
  */
 export function getDefaultRecipeForDish(dishName: string): ExtractedIngredient[] {
   const norm = normalizeName(dishName)
-  if (!norm) return []
+  if (!norm || /^restes?\b/i.test(norm)) return []
+
+  const unaccented = norm.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
 
   // 1. Recherche dans les recettes classiques précises
   for (const classic of CLASSIC_DISH_RECIPES) {
-    if (classic.keywords.some((kw) => norm.includes(kw))) {
+    if (
+      classic.keywords.some((kw) => {
+        const cleanKw = kw.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        return norm.includes(kw) || unaccented.includes(cleanKw)
+      })
+    ) {
       return classic.ingredients.map((ing) => toExtractedIngredient(ing.name, ing.quantity))
     }
   }
 
   // 2. Recherche par correspondance dans STAPLE_MEALS (auto-planner)
   for (const staple of STAPLE_MEALS) {
-    const stapleNorm = normalizeName(staple.name)
-    if (norm.includes(stapleNorm) || stapleNorm.includes(norm)) {
+    const stapleClean = staple.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    if (
+      unaccented === stapleClean ||
+      (unaccented.length >= 6 && (stapleClean.includes(unaccented) || unaccented.includes(stapleClean)))
+    ) {
       return staple.ingredients.map((ing) => toExtractedIngredient(ing))
     }
   }
 
-  // 3. Recherche par famille culinaire lexicale
-  for (const fam of CULINARY_FAMILIES) {
-    if (fam.keywords.some((kw) => norm.includes(kw))) {
-      return fam.ingredients.map((ing) => toExtractedIngredient(ing.name, ing.quantity))
-    }
-  }
-
-  // 4. Base équilibrée par défaut
-  return [
-    toExtractedIngredient("Protéine au choix", "350g"),
-    toExtractedIngredient("Féculent (riz ou pâtes)", "300g"),
-    toExtractedIngredient("Légumes de saison", "300g"),
-    toExtractedIngredient("Huile d'olive", "2 c. à soupe"),
-  ]
+  // Si aucune recette précise et exacte n'est connue : ne rien inventer (liste vide)
+  return []
 }
 
 /**
@@ -1093,7 +930,7 @@ export function extractMealsFromText(
         if (m) {
           const dishRaw = m[4] || m[2]
           const dishName = cleanDishName(dishRaw)
-          if (!dishName || dishName.length < 2) continue
+          if (!dishName || dishName.length < 2 || /^restes?\b/i.test(dishName)) continue
           const norm = normalizeName(dishName)
           if (seenTitles.has(norm)) continue
           seenTitles.add(norm)
@@ -1132,7 +969,7 @@ export function extractMealsFromText(
       if (match) {
         const dishRaw = match[4] || match[2]
         const dishName = cleanDishName(dishRaw)
-        if (dishName.length < 2) continue
+        if (dishName.length < 2 || /^restes?\b/i.test(dishName)) continue
         const norm = normalizeName(dishName)
         if (seenTitles.has(norm)) continue
         seenTitles.add(norm)
@@ -1166,7 +1003,7 @@ export function extractMealsFromText(
       const seenTitles = new Set<string>()
       for (const part of commaParts) {
         const dishName = cleanDishName(part)
-        if (dishName.length < 2) continue
+        if (dishName.length < 2 || /^restes?\b/i.test(dishName)) continue
         const norm = normalizeName(dishName)
         if (seenTitles.has(norm)) continue
         seenTitles.add(norm)
@@ -1228,7 +1065,7 @@ export function extractMealsFromText(
 
         for (const line of nonInstructionLines) {
           const dishName = cleanDishName(line)
-          if (dishName.length < 2) continue
+          if (dishName.length < 2 || /^restes?\b/i.test(dishName)) continue
           const norm = normalizeName(dishName)
           if (seenTitles.has(norm)) continue
           seenTitles.add(norm)
@@ -1264,7 +1101,7 @@ export function extractMealsFromText(
     const seenTitles = new Set<string>()
     for (const l of listLines) {
       const dish = cleanDishName(l)
-      if (!dish || dish.length < 2) continue
+      if (!dish || dish.length < 2 || /^restes?\b/i.test(dish)) continue
       const norm = normalizeName(dish)
       if (seenTitles.has(norm)) continue
       seenTitles.add(norm)

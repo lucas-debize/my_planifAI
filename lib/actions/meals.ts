@@ -1,6 +1,7 @@
 "use server"
 
 import {
+  deleteAllMeals as deleteAllMealsDomain,
   deleteMeal as deleteMealDomain,
   getMeal as getMealDomain,
   listMeals as listMealsDomain,
@@ -90,6 +91,13 @@ export async function deleteMeal(id: string): Promise<void> {
   const { supabase, authUid, scope } = await requireScopedContext()
   await deleteMealDomain(supabase, toMealScope(scope, authUid), id)
   revalidateApp()
+}
+
+export async function deleteAllMealsAction(): Promise<{ count: number }> {
+  const { supabase, authUid, scope } = await requireScopedContext()
+  const count = await deleteAllMealsDomain(supabase, toMealScope(scope, authUid))
+  revalidateApp()
+  return { count }
 }
 
 export async function copyMealAction(input: {
