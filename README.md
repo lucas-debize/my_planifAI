@@ -1,5 +1,5 @@
 # MyPlanifAI 🥗
-
+> 🚀 **Live Demo:** Try the app at [myplanifai.vercel.app](https://myplanifai.vercel.app/).
 > **Modern, AI-powered weekly meal planner and smart grocery list PWA.**  
 > Plan lunch & dinner, scan handwritten meal schedules with vision AI, extract recipes from URLs or text, collaborate with your family, and automatically organize groceries by supermarket aisle.
 
@@ -11,17 +11,13 @@
 [![Bun Test](https://img.shields.io/badge/Tests-129%20Passing-success?logo=bun)](https://bun.sh/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
----
 
 ### Demo Video
 
 **Full walkthrough**: Photo scan of handwritten meal schedule → AI transcription & slot assignment → Auto-categorized grocery list by supermarket aisle.
 
-https://github.com/user-attachments/assets/f49e0d77-c8af-4338-b6ac-9ff3ac052adf
+https://github.com/user-attachments/assets/20f7ae9f-f51c-45ab-a304-f01f58445851
 
-> *Replace the link above with your uploaded demo video recording or animated preview.*
-
----
 
 ## Highlights & Features
 
@@ -61,7 +57,6 @@ https://github.com/user-attachments/assets/f49e0d77-c8af-4338-b6ac-9ff3ac052adf
 * **Multi-Account Vault**: Switch between multiple Google accounts on the same device without logging out.
 * **Offline Dev Mode (`DEV_AUTH_BYPASS=1`)**: Fully functional offline mock account (`dev@planifia.local`) backed by a local JSON store, enabling complete development without Supabase or Google credentials.
 
----
 
 ## Tech Stack
 
@@ -76,7 +71,6 @@ https://github.com/user-attachments/assets/f49e0d77-c8af-4338-b6ac-9ff3ac052adf
 | **Testing** | [Bun Test](https://bun.sh/) (129 unit tests in ~1.5s) |
 | **Hosting & CI** | [Vercel](https://vercel.com/), GitHub Actions (Automated CI, Migrations & Keepalive) |
 
----
 
 ## Architecture & Database Schema
 
@@ -89,7 +83,6 @@ All database migrations are located in `supabase/migrations/`:
 
 A consolidated setup script is also available at `supabase/full_setup.sql`.
 
----
 
 ## Getting Started
 
@@ -143,27 +136,6 @@ pnpm dev
 ```
 Open [http://localhost:3000](http://localhost:3000) with your browser.
 
----
-
-## Testing & Quality
-
-Run the automated test suite covering domain logic, aisle classification, planning slots, and AI extraction:
-
-```bash
-# Run 129 unit tests
-bun test
-
-# Type checking
-bunx tsc --noEmit
-
-# Linting
-bun run lint
-
-# Production build
-bun run build
-```
-
----
 
 ## 24/7 Zero-Cost Production Deployment
 
@@ -209,25 +181,6 @@ Supabase Free pauses projects after 7 days of inactivity. This repository includ
    * `SUPABASE_ANON_KEY`: Your Supabase anon public key
 3. The keepalive workflow runs automatically every 3 days.
 
-### Step 5: Health & Monitoring Endpoint (`/api/health`)
-A public health check endpoint is available at `/api/health`:
-```json
-{
-  "status": "ok",
-  "timestamp": "2026-10-30T12:00:00.000Z",
-  "database": "connected",
-  "aiVision": {
-    "geminiConfigured": true,
-    "geminiModels": ["gemini-3.5-flash", "gemini-3.8-flash"],
-    "glmConfigured": false,
-    "openaiConfigured": false,
-    "cloudflareConfigured": true,
-    "cloudflareModel": "@cf/google/gemma-4-26b-a4b-it"
-  }
-}
-```
-
----
 
 ## Environment Variables Reference
 
@@ -243,8 +196,7 @@ A public health check endpoint is available at `/api/health`:
 | `OPENAI_API_KEY` | Optional | Server | OpenAI API key for GPT-4o Vision |
 | `GLM_API_KEY` | Optional | Server | Zhipu / GLM API key for GLM-4.5v / 5.3 Vision |
 
----
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+MIT © [Lucas Debize](https://github.com/lucas-debize)
